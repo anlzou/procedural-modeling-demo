@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import SDFRaymarching from '../views/SDFRaymarching.vue'
 import MarchingCubes from '../views/MarchingCubes.vue'
