@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages SPA redirect — 重定向到 hash 路由
+    var path = window.location.pathname
+    var repo = path.split('/')[1]  // 仓库名
+    var redirect = path.replace('/' + repo, '')
+    window.location.replace(
+      window.location.protocol + '//' + window.location.host +
+      '/' + repo + '/#' + redirect
+    )
+  </script>
+</head>
+<body></body>
+</html>
