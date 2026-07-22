@@ -30,7 +30,7 @@ const route = useRoute()
 .left-toolbar {
   position: fixed;
   top: 0.8rem;
-  left: 1rem;
+  left: 0.5rem;
   z-index: 100;
   display: flex;
   flex-direction: column;

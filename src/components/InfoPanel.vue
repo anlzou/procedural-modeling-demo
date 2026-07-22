@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 
-const collapsed = ref(false)
+const collapsed = ref(true)
 </script>
 
 <template>
@@ -35,7 +35,7 @@ const collapsed = ref(false)
 .info-panel-wrapper {
   position: absolute;
   top: 4.2rem;
-  left: 1rem;
+  left: 0.5rem;
   z-index: 10;
   max-width: 400px;
 }
@@ -64,8 +64,8 @@ const collapsed = ref(false)
 
 .circle-btn.close {
   position: absolute;
-  top: -0.5rem;
-  right: -0.5rem;
+  top: 0rem;
+  right: 0rem;
   z-index: 11;
   width: 32px;
   height: 32px;
@@ -105,7 +105,7 @@ const collapsed = ref(false)
     right: 0.5rem;
     max-width: none;
   }
-  .circle-btn.close { right: 0.5rem; }
+  .circle-btn.close { right: 0rem; }
 }
 </style>
 

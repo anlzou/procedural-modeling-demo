@@ -68,10 +68,13 @@ const paths = [
 <style scoped>
 .home {
   min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 2rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hero {
@@ -166,5 +169,30 @@ const paths = [
   color: var(--text);
   opacity: 0.6;
   font-size: 0.85rem;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .home {
+    padding: 1rem;
+  }
+  .hero {
+    margin: 1.5rem 0 2rem;
+  }
+  .hero h1 {
+    font-size: 1.8rem;
+  }
+  .subtitle {
+    font-size: 0.95rem;
+  }
+  .cards {
+    gap: 1rem;
+  }
+  .card {
+    padding: 1.25rem 1rem;
+  }
+  .footer {
+    margin-top: 2rem;
+  }
 }
 </style>
