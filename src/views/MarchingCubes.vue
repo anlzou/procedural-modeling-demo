@@ -3,9 +3,13 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MarchingCubes } from '../utils/marchingCubes.js'
+import InfoPanel from '../components/InfoPanel.vue'
+import ControlPanel from '../components/ControlPanel.vue'
 
 const canvasRef = ref(null)
-let scene, camera, renderer, controls, mesh, animationId
+let scene, camera, renderer, controls, mesh, animationId, frameCount = 0, lastFpsTime = 0
+const fps = ref(0)
+const memory = ref(0)
 
 onMounted(() => {
   init()
@@ -94,6 +98,15 @@ function onResize() {
 
 function animate() {
   animationId = requestAnimationFrame(animate)
+
+  frameCount++
+  if (lastFpsTime === 0) lastFpsTime = performance.now()
+  const now = performance.now()
+  if (now - lastFpsTime >= 1000) {
+    fps.value = frameCount; frameCount = 0; lastFpsTime = now
+    if (window.performance?.memory) memory.value = window.performance.memory.usedJSHeapSize
+  }
+
   controls.update()
   renderer.render(scene, camera)
 }
@@ -101,7 +114,7 @@ function animate() {
 
 <template>
   <div class="page">
-    <div class="info-panel">
+    <InfoPanel>
       <h2>🧊 路径 2：Marching Cubes（等值面提取）</h2>
       <p><strong>核心原理：</strong>将空间划分为体素网格，采样标量场值，用 Marching Cubes 算法提取等值面生成真实 Mesh。</p>
       <div class="features">
@@ -112,61 +125,15 @@ function animate() {
         <span>✓ 可拖拽旋转查看细节</span>
       </div>
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
-    </div>
+    </InfoPanel>
+
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="1" />
+
     <div ref="canvasRef" class="canvas-container"></div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #0a0a1a;
-}
-
-.info-panel {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
-  max-width: 380px;
-  color: #e0e0e0;
-}
-
-.info-panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.2rem;
-  color: #fff;
-}
-
-.info-panel p {
-  font-size: 0.85rem;
-  line-height: 1.6;
-  margin: 0 0 0.75rem;
-}
-
-.features {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  opacity: 0.8;
-  margin-bottom: 0.5rem;
-}
-
-.hint {
-  font-size: 0.78rem !important;
-  opacity: 0.6;
-}
-
-.canvas-container {
-  width: 100%;
-  height: 100%;
-}
+.page { display: flex; flex-direction: column; height: 100vh; background: #0a0a1a; }
+.canvas-container { width: 100%; height: 100%; }
 </style>

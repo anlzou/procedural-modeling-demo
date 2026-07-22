@@ -3,10 +3,15 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { LSystem, L_SYSTEM_PRESETS } from '../utils/lsystem.js'
+import InfoPanel from '../components/InfoPanel.vue'
+import ControlPanel from '../components/ControlPanel.vue'
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, group, animationId
 let currentPreset = ref('plant')
+let frameCount = 0, lastFpsTime = 0
+const fps = ref(0)
+const memory = ref(0)
 const presets = L_SYSTEM_PRESETS
 
 onMounted(() => {
@@ -141,6 +146,15 @@ function onResize() {
 
 function animate() {
   animationId = requestAnimationFrame(animate)
+
+  frameCount++
+  if (lastFpsTime === 0) lastFpsTime = performance.now()
+  const now = performance.now()
+  if (now - lastFpsTime >= 1000) {
+    fps.value = frameCount; frameCount = 0; lastFpsTime = now
+    if (window.performance?.memory) memory.value = window.performance.memory.usedJSHeapSize
+  }
+
   controls.update()
   renderer.render(scene, camera)
 }
@@ -148,7 +162,7 @@ function animate() {
 
 <template>
   <div class="page">
-    <div class="info-panel">
+    <InfoPanel>
       <h2>🌿 路径 4：L-System / 分形植物</h2>
       <p><strong>核心原理：</strong>用字符串重写规则生成递归结构，模拟植物、龙曲线等自然形态。</p>
       <div class="features">
@@ -169,85 +183,15 @@ function animate() {
         </button>
       </div>
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
-    </div>
+    </InfoPanel>
+
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="group?.children.length || 0" />
+
     <div ref="canvasRef" class="canvas-container"></div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #0a0a1a;
-}
-
-.info-panel {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
-  max-width: 440px;
-  color: #e0e0e0;
-}
-
-.info-panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.2rem;
-  color: #fff;
-}
-
-.info-panel p {
-  font-size: 0.85rem;
-  line-height: 1.6;
-  margin: 0 0 0.75rem;
-}
-
-.features {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  opacity: 0.8;
-  margin-bottom: 0.75rem;
-}
-
-.controls-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
-}
-
-.btn {
-  padding: 0.3rem 0.7rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  color: #ccc;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn:hover, .btn.active {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.hint {
-  font-size: 0.78rem !important;
-  opacity: 0.6;
-}
-
-.canvas-container {
-  width: 100%;
-  height: 100%;
-}
+.page { display: flex; flex-direction: column; height: 100vh; background: #0a0a1a; }
+.canvas-container { width: 100%; height: 100%; }
 </style>
