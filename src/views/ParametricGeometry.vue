@@ -11,6 +11,11 @@ let currentMode = ref('mobius')
 let frameCount = 0, lastFpsTime = 0
 const fps = ref(0)
 const memory = ref(0)
+const playing = ref(true)
+const speed = ref(1)
+
+function onTogglePlay(val) { playing.value = val }
+function onUpdateSpeed(val) { speed.value = val }
 
 // Parametric surface functions
 function mobiusStrip(u, v, target) {
@@ -229,10 +234,10 @@ function animate() {
   }
 
   // Animate wave surface vertices
-  if (currentMode.value === 'wave' && meshes.length > 0) {
+  if (playing.value && currentMode.value === 'wave' && meshes.length > 0) {
     const mesh = meshes[0]
     const positions = mesh.geometry.attributes.position
-    const time = clock.getElapsedTime()
+    const time = clock.getElapsedTime() * speed.value
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i)
       const z = positions.getZ(i)
@@ -244,6 +249,7 @@ function animate() {
   }
 
   controls.update()
+  if (!playing.value) controls.autoRotate = false
   renderer.render(scene, camera)
 }
 </script>
@@ -273,7 +279,7 @@ function animate() {
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="meshes.length" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="meshes.length" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>

@@ -10,6 +10,11 @@ const canvasRef = ref(null)
 let scene, camera, renderer, controls, mesh, animationId, frameCount = 0, lastFpsTime = 0
 const fps = ref(0)
 const memory = ref(0)
+const playing = ref(true)
+const speed = ref(1)
+
+function onTogglePlay(val) { playing.value = val }
+function onUpdateSpeed(val) { speed.value = val }
 
 onMounted(() => {
   init()
@@ -108,6 +113,7 @@ function animate() {
   }
 
   controls.update()
+  if (!playing.value) controls.autoRotate = false
   renderer.render(scene, camera)
 }
 </script>
@@ -127,7 +133,7 @@ function animate() {
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="1" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="1" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>

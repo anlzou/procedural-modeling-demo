@@ -12,7 +12,12 @@ let currentPreset = ref('plant')
 let frameCount = 0, lastFpsTime = 0
 const fps = ref(0)
 const memory = ref(0)
+const playing = ref(true)
+const speed = ref(1)
 const presets = L_SYSTEM_PRESETS
+
+function onTogglePlay(val) { playing.value = val }
+function onUpdateSpeed(val) { speed.value = val }
 
 onMounted(() => {
   init()
@@ -156,6 +161,7 @@ function animate() {
   }
 
   controls.update()
+  if (!playing.value) controls.autoRotate = false
   renderer.render(scene, camera)
 }
 </script>
@@ -185,7 +191,7 @@ function animate() {
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="group?.children.length || 0" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="group?.children.length || 0" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>

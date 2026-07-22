@@ -4,10 +4,24 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 const expanded = ref(false)
 const panelRef = ref(null)
 const alpha = ref(0.6)
+const playing = ref(true)
+const speed = ref(1)
+
+const emit = defineEmits(['togglePlay', 'updateSpeed'])
 
 function setAlpha(val) {
   alpha.value = val
   document.documentElement.style.setProperty('--panel-alpha', val)
+}
+
+function togglePlay() {
+  playing.value = !playing.value
+  emit('togglePlay', playing.value)
+}
+
+function changeSpeed(val) {
+  speed.value = val
+  emit('updateSpeed', val)
 }
 
 function onClickOutside(e) {
@@ -72,10 +86,33 @@ defineProps({
           <div class="placeholder-msg">动态生成 / 显示控制（待实现）</div>
         </div>
 
-        <!-- 动画控制（占位） -->
+        <!-- 动画控制 -->
         <div class="section">
           <div class="section-title">🔄 动画控制</div>
-          <div class="placeholder-msg">播放 / 暂停 / 速度调节（待实现）</div>
+          <div class="anim-row">
+            <button class="play-btn" @click="togglePlay" :title="playing ? '暂停' : '播放'">
+              <svg v-if="playing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              </svg>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            </button>
+            <div class="speed-row">
+              <span class="slider-label">速度</span>
+              <input
+                type="range"
+                min="0"
+                max="3"
+                step="0.1"
+                :value="speed"
+                @input="changeSpeed(parseFloat($event.target.value))"
+                class="alpha-slider"
+              />
+              <span class="slider-value">{{ speed.toFixed(1) }}x</span>
+            </div>
+          </div>
         </div>
 
         <!-- 面板透明度 -->
@@ -236,10 +273,43 @@ defineProps({
 }
 
 /* Slider */
-.slider-row {
+.slider-row,
+.anim-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.anim-row {
+  gap: 0.6rem;
+}
+
+.play-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.play-btn:hover {
+  background: rgba(80, 80, 160, 0.4);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
 }
 
 .slider-label {

@@ -13,6 +13,11 @@ let objects = [], animationId, frameCount = 0, lastFpsTime = 0
 const fps = ref(0)
 const memory = ref(0)
 const objectCount = ref(8)
+const playing = ref(true)
+const speed = ref(1)
+
+function onTogglePlay(val) { playing.value = val }
+function onUpdateSpeed(val) { speed.value = val }
 
 onMounted(() => { init(); animate() })
 onBeforeUnmount(() => {
@@ -102,18 +107,22 @@ function animate(time) {
     if (window.performance?.memory) memory.value = window.performance.memory.usedJSHeapSize
   }
 
-  if (shaderMat) shaderMat.uniforms.uTime.value = t
+  if (playing.value) {
+    const s = speed.value
+    if (shaderMat) shaderMat.uniforms.uTime.value = t * s
 
-  objects.forEach((o, i) => {
-    o.mesh.rotation.x += o.rotSpeed[0] * 0.012
-    o.mesh.rotation.y += o.rotSpeed[1] * 0.012
-    o.mesh.rotation.z += o.rotSpeed[2] * 0.012
-    o.mesh.position.y = o.initPos.y + Math.sin(t * 0.6 + o.phase) * 0.3
-    o.mesh.position.x = o.initPos.x + Math.sin(t * 0.4 + o.phase * 0.7) * 0.15
-    o.mesh.material.emissiveIntensity = 0.3 + 0.2 * Math.sin(t * 0.8 + o.phase)
-  })
+    objects.forEach((o, i) => {
+      o.mesh.rotation.x += o.rotSpeed[0] * 0.012 * s
+      o.mesh.rotation.y += o.rotSpeed[1] * 0.012 * s
+      o.mesh.rotation.z += o.rotSpeed[2] * 0.012 * s
+      o.mesh.position.y = o.initPos.y + Math.sin(t * 0.6 * s + o.phase) * 0.3
+      o.mesh.position.x = o.initPos.x + Math.sin(t * 0.4 * s + o.phase * 0.7) * 0.15
+      o.mesh.material.emissiveIntensity = 0.3 + 0.2 * Math.sin(t * 0.8 * s + o.phase)
+    })
+  }
 
   controls.update()
+  if (playing.value) controls.autoRotate = true; else controls.autoRotate = false
   renderer.render(scene, camera)
 }
 </script>
@@ -133,7 +142,7 @@ function animate(time) {
       <p class="hint">🖱 拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>
