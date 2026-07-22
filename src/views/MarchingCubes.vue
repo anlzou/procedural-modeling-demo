@@ -113,7 +113,7 @@ function animate() {
   }
 
   controls.update()
-  if (!playing.value) controls.autoRotate = false
+  controls.autoRotate = playing.value
   renderer.render(scene, camera)
 }
 </script>

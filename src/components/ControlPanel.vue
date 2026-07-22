@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const expanded = ref(false)
 const panelRef = ref(null)
-const alpha = ref(0.6)
+const alpha = ref(0.15)
 const playing = ref(true)
 const speed = ref(1)
 
@@ -122,7 +122,7 @@ defineProps({
             <span class="slider-label">半透明</span>
             <input
               type="range"
-              min="0.15"
+              min="0.05"
               max="0.95"
               step="0.05"
               :value="alpha"
