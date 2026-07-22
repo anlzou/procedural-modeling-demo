@@ -2,29 +2,32 @@
 import { ref } from 'vue'
 
 const collapsed = ref(false)
-const emit = defineEmits(['toggle'])
 </script>
 
 <template>
   <div class="info-panel-wrapper" :class="{ collapsed }">
-    <!-- 折叠切换按钮 -->
-    <button class="toggle-btn" @click="collapsed = !collapsed" :title="collapsed ? '展开信息' : '折叠信息'">
-      <span v-if="collapsed">?</span>
-      <span v-else>✕</span>
+    <!-- 折叠状态：纯 ? 图标按钮 -->
+    <button v-if="collapsed" class="circle-btn" @click="collapsed = false" title="展开信息">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+        <path d="M12 17h.01"/>
+      </svg>
     </button>
 
-    <!-- 折叠状态只显示标题 -->
-    <div v-if="collapsed" class="collapsed-hint">
-      <span class="collapsed-icon">?</span>
-      <span>点击 ? 展开信息</span>
-    </div>
-
-    <!-- 主体内容 -->
-    <div v-show="!collapsed" class="info-panel">
-      <div class="info-panel-body">
-        <slot />
+    <!-- 展开状态 -->
+    <template v-else>
+      <div class="info-panel">
+        <button class="circle-btn close" @click="collapsed = true" title="折叠信息">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+        <div class="info-panel-body">
+          <slot />
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -37,69 +40,44 @@ const emit = defineEmits(['toggle'])
   max-width: 400px;
 }
 
-.toggle-btn {
+.circle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.circle-btn:hover {
+  background: rgba(80, 80, 160, 0.5);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.circle-btn.close {
   position: absolute;
   top: -0.5rem;
   right: -0.5rem;
   z-index: 11;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(30, 30, 50, 0.85);
-  backdrop-filter: blur(8px);
+  width: 32px;
+  height: 32px;
+}
+
+.circle-btn.close:hover {
+  background: rgba(180, 60, 60, 0.5);
   color: #fff;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.25s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.toggle-btn:hover {
-  background: rgba(100, 100, 180, 0.6);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: scale(1.1);
-}
-
-.collapsed-hint {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 0.5rem 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.collapsed-hint:hover {
-  background: rgba(0, 0, 0, 0.7);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.collapsed-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(100, 100, 180, 0.4);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #a5b4fc;
 }
 
 .info-panel {
+  position: relative;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -121,21 +99,16 @@ const emit = defineEmits(['toggle'])
   }
 }
 
-/* 响应式 */
 @media (max-width: 768px) {
   .info-panel-wrapper {
     left: 0.5rem;
     right: 0.5rem;
     max-width: none;
   }
-
-  .toggle-btn {
-    right: 0.5rem;
-  }
+  .circle-btn.close { right: 0.5rem; }
 }
 </style>
 
-<!-- 全局样式：作用于 slot 内容，确保跨组件一致性 -->
 <style>
 .info-panel-body h2 {
   margin: 0 0 0.5rem;
@@ -144,14 +117,12 @@ const emit = defineEmits(['toggle'])
   color: #fff;
   line-height: 1.4;
 }
-
 .info-panel-body p {
   font-size: 0.85rem;
   line-height: 1.6;
   margin: 0 0 0.75rem;
   color: #d0d0e0;
 }
-
 .info-panel-body .features {
   display: flex;
   flex-direction: column;
@@ -161,21 +132,18 @@ const emit = defineEmits(['toggle'])
   margin-bottom: 0.5rem;
   color: #c0c0d0;
 }
-
 .info-panel-body .hint {
   font-size: 0.78rem;
   opacity: 0.55;
   margin-top: 0.5rem;
   color: #b0b0c0;
 }
-
 .info-panel-body .controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0.5rem 0 0;
 }
-
 .info-panel-body .btn {
   padding: 0.3rem 0.7rem;
   border-radius: 6px;
@@ -187,7 +155,6 @@ const emit = defineEmits(['toggle'])
   transition: all 0.2s;
   white-space: nowrap;
 }
-
 .info-panel-body .btn:hover,
 .info-panel-body .btn.active {
   background: rgba(255, 255, 255, 0.15);

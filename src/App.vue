@@ -7,11 +7,14 @@ const route = useRoute()
 
 <template>
   <div class="app-layout">
-    <nav class="top-nav" v-if="route.path !== '/'">
-      <button class="back-btn" @click="router.push('/')">
-        ← 返回首页
+    <!-- 左侧工具栏：竖向对齐 -->
+    <div class="left-toolbar" v-if="route.path !== '/'">
+      <button class="icon-btn" @click="router.push('/')" title="返回首页">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
       </button>
-    </nav>
+    </div>
     <router-view />
   </div>
 </template>
@@ -24,35 +27,37 @@ const route = useRoute()
   position: relative;
 }
 
-.top-nav {
+.left-toolbar {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0.8rem;
+  left: 1rem;
   z-index: 100;
-  padding: 0.6rem 1.2rem;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   pointer-events: none;
 }
 
-.back-btn {
+.left-toolbar .icon-btn {
   pointer-events: auto;
-  padding: 0.35rem 0.9rem;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: all 0.2s;
-  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.35);
+.left-toolbar .icon-btn:hover {
+  background: rgba(80, 80, 160, 0.5);
   color: #fff;
+  transform: scale(1.08);
 }
 </style>
