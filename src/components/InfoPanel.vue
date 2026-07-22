@@ -1,12 +1,22 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const collapsed = ref(true)
+const panelRef = ref(null)
+
+function onClickOutside(e) {
+  if (!collapsed.value && panelRef.value && !panelRef.value.contains(e.target)) {
+    collapsed.value = true
+  }
+}
+
+onMounted(() => document.addEventListener('mousedown', onClickOutside))
+onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 </script>
 
 <template>
   <div class="info-panel-wrapper" :class="{ collapsed }">
-    <!-- 折叠状态：纯 ? 图标按钮 -->
+    <!-- 折叠状态：? 图标按钮 -->
     <button v-if="collapsed" class="circle-btn" @click="collapsed = false" title="展开信息">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
@@ -15,14 +25,9 @@ const collapsed = ref(true)
       </svg>
     </button>
 
-    <!-- 展开状态 -->
+    <!-- 展开状态（无关闭按钮，点击外部关闭） -->
     <template v-else>
-      <div class="info-panel">
-        <button class="circle-btn close" @click="collapsed = true" title="折叠信息">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
+      <div ref="panelRef" class="info-panel">
         <div class="info-panel-body">
           <slot />
         </div>
@@ -45,8 +50,8 @@ const collapsed = ref(true)
   height: 40px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, calc(var(--panel-alpha, 0.65) + 0.1));
+  backdrop-filter: blur(12px);
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   display: flex;
@@ -62,25 +67,11 @@ const collapsed = ref(true)
   transform: scale(1.08);
 }
 
-.circle-btn.close {
-  position: absolute;
-  top: 0rem;
-  right: 0rem;
-  z-index: 11;
-  width: 32px;
-  height: 32px;
-}
-
-.circle-btn.close:hover {
-  background: rgba(180, 60, 60, 0.5);
-  color: #fff;
-}
-
 .info-panel {
   position: relative;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, var(--panel-alpha, 0.65));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 1.25rem 1.5rem;
@@ -105,7 +96,6 @@ const collapsed = ref(true)
     right: 0.5rem;
     max-width: none;
   }
-  .circle-btn.close { right: 0rem; }
 }
 </style>
 

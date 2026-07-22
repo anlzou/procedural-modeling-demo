@@ -1,7 +1,26 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const expanded = ref(false)
+const panelRef = ref(null)
+const alpha = ref(0.6)
+
+function setAlpha(val) {
+  alpha.value = val
+  document.documentElement.style.setProperty('--panel-alpha', val)
+}
+
+function onClickOutside(e) {
+  if (expanded.value && panelRef.value && !panelRef.value.contains(e.target)) {
+    expanded.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onClickOutside)
+  document.documentElement.style.setProperty('--panel-alpha', alpha.value)
+})
+onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 defineProps({
   fps: { type: Number, default: 0 },
@@ -12,8 +31,8 @@ defineProps({
 
 <template>
   <div class="control-panel-wrapper" :class="{ expanded }">
-    <!-- 展开/折叠按钮 -->
-    <button class="ctrl-toggle" @click="expanded = !expanded" :title="expanded ? '折叠控制' : '展开控制'">
+    <!-- 展开按钮（面板关闭时显示） -->
+    <button v-show="!expanded" class="ctrl-toggle" @click="expanded = true" title="展开控制">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <line x1="4" y1="6" x2="20" y2="6" />
         <line x1="4" y1="12" x2="20" y2="12" />
@@ -21,12 +40,11 @@ defineProps({
       </svg>
     </button>
 
+    <!-- 面板（无关闭按钮，点击外部关闭） -->
     <Transition name="slide">
-      <div v-show="expanded" class="control-panel">
-        <!-- 标题栏 -->
+      <div v-show="expanded" ref="panelRef" class="control-panel">
         <div class="panel-header">
           <h3>⚙ 控制面板</h3>
-          <button class="close-btn" @click="expanded = false" title="关闭">✕</button>
         </div>
 
         <!-- 性能监控 -->
@@ -60,10 +78,23 @@ defineProps({
           <div class="placeholder-msg">播放 / 暂停 / 速度调节（待实现）</div>
         </div>
 
-        <!-- 渲染控制（占位） -->
+        <!-- 面板透明度 -->
         <div class="section">
-          <div class="section-title">🎨 渲染选项</div>
-          <div class="placeholder-msg">线框 / 材质 / 光照切换（待实现）</div>
+          <div class="section-title">🔍 面板透明度</div>
+          <div class="slider-row">
+            <span class="slider-label">半透明</span>
+            <input
+              type="range"
+              min="0.15"
+              max="0.95"
+              step="0.05"
+              :value="alpha"
+              @input="setAlpha(parseFloat($event.target.value))"
+              class="alpha-slider"
+            />
+            <span class="slider-label">实心</span>
+            <span class="slider-value">{{ Math.round(alpha * 100) }}%</span>
+          </div>
         </div>
       </div>
     </Transition>
@@ -79,10 +110,12 @@ defineProps({
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.5rem;
+  justify-content: flex-end;
+  pointer-events: none;
 }
 
 .ctrl-toggle {
+  pointer-events: auto;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -96,6 +129,10 @@ defineProps({
   justify-content: center;
   transition: all 0.25s ease;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  /* 按钮始终固定在右下角 */
+  position: absolute;
+  bottom: 0;
+  right: 0;
 }
 
 .ctrl-toggle:hover {
@@ -105,10 +142,11 @@ defineProps({
 }
 
 .control-panel {
+  pointer-events: auto;
   width: 280px;
   max-height: 70vh;
   overflow-y: auto;
-  background: rgba(10, 10, 20, 0.88);
+  background: rgba(10, 10, 20, var(--panel-alpha, 0.6));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -116,6 +154,7 @@ defineProps({
   padding: 0;
   color: #d0d0e0;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  margin-bottom: 48px;
 }
 
 .panel-header {
@@ -131,22 +170,6 @@ defineProps({
   font-size: 0.9rem;
   font-weight: 600;
   color: #f0f0ff;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.close-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .section {
@@ -212,6 +235,64 @@ defineProps({
   padding: 0.3rem 0;
 }
 
+/* Slider */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.slider-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+
+.slider-value {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.alpha-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  cursor: pointer;
+}
+
+.alpha-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(130, 130, 200, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alpha-slider::-webkit-slider-thumb:hover {
+  background: rgba(130, 130, 200, 0.9);
+  transform: scale(1.15);
+}
+
+.alpha-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(130, 130, 200, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
 /* Transition */
 .slide-enter-active,
 .slide-leave-active {
@@ -221,7 +302,7 @@ defineProps({
 .slide-enter-from,
 .slide-leave-to {
   opacity: 0;
-  transform: translateY(10px) scale(0.96);
+  transform: translateY(-10px) scale(0.96);
 }
 
 /* 响应式 */
