@@ -270,8 +270,10 @@ function animate() {
 <template>
   <div class="page">
     <InfoPanel>
-      <h2>🌀 路径 3：Parametric Geometry（参数化曲面）</h2>
-      <p><strong>核心原理：</strong>用数学函数 f(u,v) → (x,y,z) 定义曲面，程序化生成 BufferGeometry。</p>
+      <template #header>
+        <h2>🌀 路径 3：Parametric Geometry（参数化曲面）</h2>
+        <p><strong>核心原理：</strong>用数学函数 f(u,v) → (x,y,z) 定义曲面，程序化生成 BufferGeometry。</p>
+      </template>
       <div class="features">
         <span>✓ 莫比乌斯环、克莱因瓶</span>
         <span>✓ 超级公式（Superformula）</span>

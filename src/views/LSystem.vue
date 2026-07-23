@@ -17,6 +17,21 @@ const playing = ref(true)
 const speed = ref(1)
 const presets = L_SYSTEM_PRESETS
 
+// 分类标签映射
+const CATEGORY_LABELS = {
+  plant: '🌿 植物类',
+  fractal: '🔺 分形类',
+  curve: '📐 曲线类',
+}
+const CATEGORY_ORDER = ['plant', 'fractal', 'curve']
+
+// 按分类分组预设
+const categoryGroups = CATEGORY_ORDER.map(cat => ({
+  key: cat,
+  label: CATEGORY_LABELS[cat],
+  items: Object.entries(presets).filter(([, p]) => p.category === cat),
+}))
+
 // 生长控制
 const growing = ref(false)
 const growthSpeed = ref(8)
@@ -26,9 +41,6 @@ let allSegments = []        // 预计算的所有线段
 let lsInstance = null       // 当前的 LSystem 实例
 let presetData = null       // 当前的预设数据
 let growthFrameAccum = 0    // 帧累积器，用于平滑生长
-
-// 仅植物类预设才随机分支数量
-const PLANT_KEYS = new Set(['plant', 'fractalTree', 'barnsley'])
 
 const lightSources = [
   { name: '环境光' },
@@ -49,10 +61,10 @@ function onToggleGrowth() {
   growthFrameAccum = 0
 
   const key = currentPreset.value
+  const preset = presets[key]
 
-  if (PLANT_KEYS.has(key)) {
+  if (preset?.category === 'plant') {
     // 植物预设：随机选择迭代次数控制分支数量（结构完整）
-    const preset = presets[key]
     const maxIter = preset.iterations
     const minIter = Math.max(1, Math.floor(maxIter * 0.5)) // 至少一半迭代
     const randIter = minIter + Math.floor(Math.random() * (maxIter - minIter + 1))
@@ -307,24 +319,33 @@ function animate() {
 <template>
   <div class="page">
     <InfoPanel>
-      <h2>🌿 路径 4：L-System / 分形植物</h2>
-      <p><strong>核心原理：</strong>用字符串重写规则生成递归结构，模拟植物、龙曲线等自然形态。</p>
+      <template #header>
+        <h2>🌿 路径 4：L-System / 分形植物</h2>
+        <p><strong>核心原理：</strong>用字符串重写规则生成递归结构，模拟植物、龙曲线等自然形态。</p>
+      </template>
       <div class="features">
         <span>✓ 公理 (Axiom) + 产生式规则</span>
         <span>✓ 递归迭代生成复杂结构</span>
-        <span>✓ 状态栈 [ ] 实现分支</span>
+        <span>✓ 状态栈实现分支</span>
         <span>✓ TubeGeometry 管状渲染</span>
       </div>
-      <div class="controls-row">
-        <button
-          v-for="(p, key) in presets"
-          :key="key"
-          class="btn"
-          :class="{ active: currentPreset === key }"
-          @click="switchPreset(key)"
-        >
-          {{ p.name }}
-        </button>
+      <div
+        v-for="group in categoryGroups"
+        :key="group.key"
+        class="category-group"
+      >
+        <div class="category-label">{{ group.label }}</div>
+        <div class="controls-row">
+          <button
+            v-for="[key, p] in group.items"
+            :key="key"
+            class="btn"
+            :class="{ active: currentPreset === key }"
+            @click="switchPreset(key)"
+          >
+            {{ p.name }}
+          </button>
+        </div>
       </div>
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
@@ -338,4 +359,20 @@ function animate() {
 <style scoped>
 .page { display: flex; flex-direction: column; height: 100vh; background: #0a0a1a; }
 .canvas-container { width: 100%; height: 100%; }
+
+.category-group {
+  margin-bottom: 0.5rem;
+}
+.category-group:last-child {
+  margin-bottom: 0;
+}
+.category-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.5px;
+  margin-bottom: 0.3rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
 </style>

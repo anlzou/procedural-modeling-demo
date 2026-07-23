@@ -387,8 +387,10 @@ function animate(time) {
 <template>
   <div class="page">
     <InfoPanel>
-      <h2>🔮 路径 1：SDF + Raymarching</h2>
-      <p><strong>核心原理：</strong>不生成网格，直接在 Fragment Shader 中用数学函数定义空间中的形状，通过光线步进（Raymarching）渲染。</p>
+      <template #header>
+        <h2>🔮 路径 1：SDF + Raymarching</h2>
+        <p><strong>核心原理：</strong>不生成网格，直接在 Fragment Shader 中用数学函数定义空间中的形状，通过光线步进（Raymarching）渲染。</p>
+      </template>
       <div class="features">
         <span>✓ SDF 基本体：球体、立方体、圆环、圆柱</span>
         <span>✓ 布尔运算：并集、交集、差集、平滑并集</span>

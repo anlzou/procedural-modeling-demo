@@ -37,7 +37,12 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
           </svg>
         </button>
         <div class="info-panel-body">
-          <slot />
+          <div class="info-panel-body-fixed">
+            <slot name="header" />
+          </div>
+          <div class="info-panel-body-scroll">
+            <slot />
+          </div>
         </div>
       </div>
     </template>
@@ -77,6 +82,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 .info-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 55vh;
   background: rgba(0, 0, 0, var(--panel-alpha, 0.65));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -85,6 +93,43 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   padding: 1.25rem 1.5rem;
   color: #e0e0e0;
   animation: panelIn 0.3s ease;
+}
+
+.info-panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.info-panel-body-fixed {
+  flex-shrink: 0;
+}
+.info-panel-body-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  margin-top: 0.5rem;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  /* Bounce 弹性效果 */
+}
+.info-panel-body-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.info-panel-body-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+/* 弹性的阴影提示 */
+.info-panel-body-scroll::before,
+.info-panel-body-scroll::after {
+  content: '';
+  display: block;
+  height: 0.25rem;
+  flex-shrink: 0;
 }
 
 .info-panel .pin-btn {

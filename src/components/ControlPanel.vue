@@ -104,8 +104,8 @@ watch(() => props.lightSources, (val) => {
           </button>
         </div>
 
-        <!-- 性能监控 -->
-        <div class="section">
+        <!-- 性能监控（固定区域） -->
+        <div class="section section-fixed">
           <div class="section-title">📊 性能监控</div>
           <div class="monitor-grid">
             <div class="monitor-item">
@@ -123,113 +123,116 @@ watch(() => props.lightSources, (val) => {
           </div>
         </div>
 
-        <!-- 光源控制 -->
-        <div v-if="lightSources" class="section">
-          <div class="section-title">💡 光源控制</div>
-          <div class="controls-row" style="margin-bottom:0.4rem;">
-            <button
-              v-for="(ls, i) in lightSources"
-              :key="i"
-              class="light-btn"
-              :class="{ active: lightVisible[i] }"
-              @click="toggleLight(i)"
-            >{{ ls.name }}</button>
-          </div>
-          <div class="slider-row">
-            <span class="slider-label">亮度</span>
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.05"
-              :value="lightIntensity"
-              @input="changeLightIntensity(parseFloat($event.target.value))"
-              class="alpha-slider"
-            />
-            <span class="slider-value">{{ lightIntensity.toFixed(1) }}x</span>
-          </div>
-        </div>
-
-        <!-- 动画控制 -->
-        <div class="section">
-          <div class="section-title">🔄 动画控制</div>
-          <div class="anim-row">
-            <button class="play-btn" @click="togglePlay" :title="playing ? '暂停' : '播放'">
-              <svg v-if="playing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1"/>
-                <rect x="14" y="4" width="4" height="16" rx="1"/>
-              </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-            </button>
-            <div class="speed-row">
-              <span class="slider-label">速度</span>
+        <!-- 可滚动区域 -->
+        <div class="control-panel-scroll">
+          <!-- 光源控制 -->
+          <div v-if="lightSources" class="section">
+            <div class="section-title">💡 光源控制</div>
+            <div class="controls-row" style="margin-bottom:0.4rem;">
+              <button
+                v-for="(ls, i) in lightSources"
+                :key="i"
+                class="light-btn"
+                :class="{ active: lightVisible[i] }"
+                @click="toggleLight(i)"
+              >{{ ls.name }}</button>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">亮度</span>
               <input
                 type="range"
                 min="0"
-                max="3"
-                step="0.1"
-                :value="speed"
-                @input="changeSpeed(parseFloat($event.target.value))"
+                max="2"
+                step="0.05"
+                :value="lightIntensity"
+                @input="changeLightIntensity(parseFloat($event.target.value))"
                 class="alpha-slider"
               />
-              <span class="slider-value">{{ speed.toFixed(1) }}x</span>
+              <span class="slider-value">{{ lightIntensity.toFixed(1) }}x</span>
             </div>
           </div>
-        </div>
 
-        <!-- 生长控制 -->
-        <div v-if="growthTotal > 0" class="section">
-          <div class="section-title">🌱 生长控制</div>
-          <div class="anim-row">
-            <button class="play-btn" @click="toggleGrowth" :title="growing ? '暂停生长' : '开始生长'">
-              <svg v-if="growing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1"/>
-                <rect x="14" y="4" width="4" height="16" rx="1"/>
-              </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-            </button>
-            <div class="speed-row">
-              <span class="slider-label">生长速度</span>
+          <!-- 动画控制 -->
+          <div class="section">
+            <div class="section-title">🔄 动画控制</div>
+            <div class="anim-row">
+              <button class="play-btn" @click="togglePlay" :title="playing ? '暂停' : '播放'">
+                <svg v-if="playing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1"/>
+                  <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5,3 19,12 5,21"/>
+                </svg>
+              </button>
+              <div class="speed-row">
+                <span class="slider-label">速度</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="3"
+                  step="0.1"
+                  :value="speed"
+                  @input="changeSpeed(parseFloat($event.target.value))"
+                  class="alpha-slider"
+                />
+                <span class="slider-value">{{ speed.toFixed(1) }}x</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 生长控制 -->
+          <div v-if="growthTotal > 0" class="section">
+            <div class="section-title">🌱 生长控制</div>
+            <div class="anim-row">
+              <button class="play-btn" @click="toggleGrowth" :title="growing ? '暂停生长' : '开始生长'">
+                <svg v-if="growing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1"/>
+                  <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5,3 19,12 5,21"/>
+                </svg>
+              </button>
+              <div class="speed-row">
+                <span class="slider-label">速度</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="60"
+                  step="1"
+                  :value="growthSpeed"
+                  @input="changeGrowthSpeed(parseFloat($event.target.value))"
+                  class="alpha-slider"
+                />
+                <span class="slider-value">{{ growthSpeed.toFixed(0) }}</span>
+              </div>
+            </div>
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: (growthTotal > 0 ? (growthProgress / growthTotal * 100) : 0) + '%' }"></div>
+              </div>
+              <span class="progress-label">{{ growthProgress }} / {{ growthTotal }}</span>
+            </div>
+          </div>
+
+          <!-- 面板透明度 -->
+          <div class="section">
+            <div class="section-title">🔍 面板透明度</div>
+            <div class="slider-row">
+              <span class="slider-label">半透明</span>
               <input
                 type="range"
-                min="1"
-                max="60"
-                step="1"
-                :value="growthSpeed"
-                @input="changeGrowthSpeed(parseFloat($event.target.value))"
+                min="0.05"
+                max="0.95"
+                step="0.05"
+                :value="alpha"
+                @input="setAlpha(parseFloat($event.target.value))"
                 class="alpha-slider"
               />
-              <span class="slider-value">{{ growthSpeed.toFixed(0) }}</span>
+              <span class="slider-label">实心</span>
+              <span class="slider-value">{{ Math.round(alpha * 100) }}%</span>
             </div>
-          </div>
-          <div class="progress-bar-wrapper">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: (growthTotal > 0 ? (growthProgress / growthTotal * 100) : 0) + '%' }"></div>
-            </div>
-            <span class="progress-label">{{ growthProgress }} / {{ growthTotal }}</span>
-          </div>
-        </div>
-
-        <!-- 面板透明度 -->
-        <div class="section">
-          <div class="section-title">🔍 面板透明度</div>
-          <div class="slider-row">
-            <span class="slider-label">半透明</span>
-            <input
-              type="range"
-              min="0.05"
-              max="0.95"
-              step="0.05"
-              :value="alpha"
-              @input="setAlpha(parseFloat($event.target.value))"
-              class="alpha-slider"
-            />
-            <span class="slider-label">实心</span>
-            <span class="slider-value">{{ Math.round(alpha * 100) }}%</span>
           </div>
         </div>
       </div>
@@ -280,8 +283,9 @@ watch(() => props.lightSources, (val) => {
 .control-panel {
   pointer-events: auto;
   width: 280px;
+  display: flex;
+  flex-direction: column;
   max-height: 70vh;
-  overflow-y: auto;
   background: rgba(10, 10, 20, var(--panel-alpha, 0.6));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -291,6 +295,28 @@ watch(() => props.lightSources, (val) => {
   color: #d0d0e0;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   margin-bottom: 48px;
+  overflow: hidden;
+}
+
+.section-fixed {
+  flex-shrink: 0;
+}
+
+.control-panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.control-panel-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.control-panel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
 }
 
 .panel-header {

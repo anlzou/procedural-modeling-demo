@@ -132,8 +132,10 @@ function animate() {
 <template>
   <div class="page">
     <InfoPanel>
-      <h2>🧊 路径 2：Marching Cubes（等值面提取）</h2>
-      <p><strong>核心原理：</strong>将空间划分为体素网格，采样标量场值，用 Marching Cubes 算法提取等值面生成真实 Mesh。</p>
+      <template #header>
+        <h2>🧊 路径 2：Marching Cubes（等值面提取）</h2>
+        <p><strong>核心原理：</strong>将空间划分为体素网格，采样标量场值，用 Marching Cubes 算法提取等值面生成真实 Mesh。</p>
+      </template>
       <div class="features">
         <span>✓ N×N×N 体素网格细分</span>
         <span>✓ 256 种配置查表生成三角形</span>
