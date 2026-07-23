@@ -37,12 +37,13 @@ function buildCylinder(start, end, radius, seg) {
 }
 
 export class LSystem {
-  constructor(axiom, rules, angle, length, iterations = 4) {
+  constructor(axiom, rules, angle, length, iterations = 4, leafLength) {
     this.axiom = axiom
     this.rules = rules
     this.angle = (angle * Math.PI) / 180
     this.length = length
     this.iterations = iterations
+    this.leafLength = leafLength != null ? leafLength : length * 0.4
   }
 
   generate() {
@@ -69,10 +70,16 @@ export class LSystem {
 
     for (const char of instructions) {
       switch (char) {
-        case 'F':
-        case 'G': {
+        case 'F': {
           const next = pos.clone().add(dir.clone().multiplyScalar(this.length))
-          segments.push({ start: pos.clone(), end: next.clone(), dir: dir.clone() })
+          segments.push({ start: pos.clone(), end: next.clone(), dir: dir.clone(), type: 'branch' })
+          pos = next
+          break
+        }
+        case 'G': {
+          const segLen = this.leafLength != null ? this.leafLength : this.length * 0.4
+          const next = pos.clone().add(dir.clone().multiplyScalar(segLen))
+          segments.push({ start: pos.clone(), end: next.clone(), dir: dir.clone(), type: 'leaf' })
           pos = next
           break
         }
@@ -103,16 +110,17 @@ export class LSystem {
   /**
    * Build a merged BufferGeometry from individual cylinder segments.
    */
-  toGeometry() {
+  toGeometry(typeFilter) {
     const segments = this.buildSegments()
-    if (segments.length === 0) return new THREE.BufferGeometry()
+    const filtered = typeFilter ? segments.filter(s => s.type === typeFilter) : segments
+    if (filtered.length === 0) return new THREE.BufferGeometry()
 
     const radius = this.length * 0.1
     const allVerts = []
     const allIdx = []
     let offset = 0
 
-    for (const seg of segments) {
+    for (const seg of filtered) {
       const cyl = buildCylinder(seg.start, seg.end, radius, 6)
       if (!cyl) continue
       for (const v of cyl.verts) allVerts.push(v)
@@ -129,10 +137,12 @@ export class LSystem {
 
   /**
    * Build a merged BufferGeometry from the first `count` segments in the array.
-   * Used for incremental growth animation.
+   * If `typeFilter` is provided, only segments with that type are included.
+   * Used for incremental growth animation and multi-color rendering.
    */
-  toGeometryFromSegments(segments, count) {
-    const validSegments = segments.slice(0, count)
+  toGeometryFromSegments(segments, count, typeFilter) {
+    let validSegments = segments.slice(0, count)
+    if (typeFilter) validSegments = validSegments.filter(s => s.type === typeFilter)
     if (validSegments.length === 0) return new THREE.BufferGeometry()
 
     const radius = this.length * 0.1
@@ -307,16 +317,6 @@ export const L_SYSTEM_PRESETS = {
     iterations: 3,
     color: 0xba68c8,
   },
-  complexTree: {
-    name: '🌲 复杂分形树 (Complex Tree)',
-    category: 'plant',
-    axiom: 'F',
-    rules: { F: 'FF[&+F][^-F][&F][^+F]' },
-    angle: 18,
-    length: 0.25,
-    iterations: 4,
-    color: 0x8d6e63,
-  },
   bush: {
     name: '🌾 分形灌木 (Fractal Bush)',
     category: 'plant',
@@ -326,5 +326,22 @@ export const L_SYSTEM_PRESETS = {
     length: 0.3,
     iterations: 4,
     color: 0x66bb6a,
+  },
+  // ── 多部件复杂模型 ──
+  complexTree: {
+    name: '🌳 3D 巨大茂密大树 (Giant Dense Tree)',
+    category: 'plant',
+    axiom: 'X',             // 初始符号，表示树干起点
+    // X 递归控制：三倍树干(FFF) + 三倍树叶(GGG) + 3方向立体分支
+    // F → FF 使每层树干翻倍 → 高大挺拔的树干
+    // GGG 每方向3片叶 → 茂密树冠
+    // < 和 > 绕 Y 轴旋转分支方向，3 个 Y 轴角度实现立体分支
+    rules: { X: 'FFF[&+GGG][<&+GGG][>&+GGG][&+X][<&+X][>&-X]', F: 'FF' },
+    angle: 30,              // 分支角度
+    length: 0.3,            // 树干长度
+    leafLength: 0.06,       // 树叶大小
+    iterations: 4,          // 迭代次数
+    color: 0x8d6e63,        // 树干棕色
+    leafColor: 0x44cc66,    // 树叶绿色
   },
 }

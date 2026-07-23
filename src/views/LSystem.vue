@@ -70,7 +70,7 @@ function onToggleGrowth() {
     const randIter = minIter + Math.floor(Math.random() * (maxIter - minIter + 1))
 
     // 用随机迭代次数重新生成
-    lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, randIter)
+    lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, randIter, preset.leafLength)
     allSegments = lsInstance.buildSegments()
     growthTotal.value = allSegments.length
   }
@@ -167,30 +167,33 @@ function buildLSystem(key) {
 
   // 保存预设和 LSystem 实例供后续增量生长使用
   presetData = preset
-  lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, preset.iterations)
+  lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, preset.iterations, preset.leafLength)
   allSegments = lsInstance.buildSegments()
   growthTotal.value = allSegments.length
 
-  // 尝试使用管状几何体
+  // 渲染完整模型（支持多部件颜色）
   let hasValidGeometry = false
-  try {
-    const geometry = lsInstance.toGeometry()
-    if (!geometry.attributes.position || geometry.attributes.position.count < 3) {
+
+  // 收集所有需要渲染的颜色组
+  const colorGroups = [{ type: null, color: preset.color }]
+  if (preset.leafColor) {
+    colorGroups.push({ type: 'leaf', color: preset.leafColor })
+    colorGroups[0].type = 'branch'  // 主干也用 type 过滤
+  }
+
+  for (const { type, color } of colorGroups) {
+    try {
+      const geometry = lsInstance.toGeometry(type)
+      if (!geometry.attributes.position || geometry.attributes.position.count < 3) continue
+      renderMesh(geometry, color)
+      hasValidGeometry = true
+    } catch (e) {
       // 回退到线条
       const lineGeo = lsInstance.toLineGeometry()
-      const material = new THREE.LineBasicMaterial({ color: preset.color })
+      const material = new THREE.LineBasicMaterial({ color })
       group.add(new THREE.Line(lineGeo, material))
       hasValidGeometry = true
-    } else {
-      // 正常渲染完整模型
-      renderMesh(geometry, preset.color)
-      hasValidGeometry = true
     }
-  } catch (e) {
-    const lineGeo = lsInstance.toLineGeometry()
-    const material = new THREE.LineBasicMaterial({ color: preset.color })
-    group.add(new THREE.Line(lineGeo, material))
-    hasValidGeometry = true
   }
 
   // 居中视图
@@ -198,7 +201,7 @@ function buildLSystem(key) {
 }
 
 /**
- * 从预计算 segments 中增量渲染前 count 段
+ * 从预计算 segments 中增量渲染前 count 段（支持多部件颜色）
  */
 function updateGrowthVisuals() {
   clearGroup()
@@ -206,12 +209,21 @@ function updateGrowthVisuals() {
   const count = growthProgress.value
   if (count === 0 || !lsInstance || !presetData) return
 
-  try {
-    const geometry = lsInstance.toGeometryFromSegments(allSegments, count)
-    if (!geometry.attributes.position || geometry.attributes.position.count < 3) return
-    renderMesh(geometry, presetData.color)
-  } catch (e) {
-    // 忽略渲染错误
+  // 收集需要渲染的颜色组
+  const colorGroups = [{ type: null, color: presetData.color }]
+  if (presetData.leafColor) {
+    colorGroups.push({ type: 'leaf', color: presetData.leafColor })
+    colorGroups[0].type = 'branch'
+  }
+
+  for (const { type, color } of colorGroups) {
+    try {
+      const geometry = lsInstance.toGeometryFromSegments(allSegments, count, type)
+      if (!geometry.attributes.position || geometry.attributes.position.count < 3) continue
+      renderMesh(geometry, color)
+    } catch (e) {
+      // 忽略渲染错误
+    }
   }
 }
 
