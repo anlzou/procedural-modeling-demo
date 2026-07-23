@@ -25,9 +25,16 @@
 
 - **SDF 基本体**：球体 (`sdSphere`)、立方体 (`sdBox`)、圆环 (`sdTorus`)、圆柱 (`sdCylinder`)
 - **布尔运算**：并集、交集、差集、平滑并集（有机过渡）
-- **域操作**：扭曲变形 (`opTwist`)、表面位移 (`opDisplace`)、重复平铺 (`opRep`)
+- **域操作**：扭曲变形 (`opTwist`)、表面位移 (`opDisplace`)
 - **分形**：Mandelbulb 分形
 - **光照**：漫反射 + 高光 + 雾效，摄像机自动环绕
+- **5 种复杂 Three.js 模型**（默认隐藏，通过面板切换显示）：
+  - 🌀 **螺旋弹簧** — CatmullRomCurve3 + TubeGeometry 螺旋路径
+  - 🧬 **DNA 双螺旋** — 双螺旋管 + CylinderGeometry 横档连接
+  - 🌟 **超公式曲面** — 自定义 BufferGeometry 参数化球面
+  - 🔺 **谢尔宾斯基四面体** — 递归 3 层分形，64 个小四面体
+  - ✦ **星芒多面体** — 二十面体核心 + 面延伸锥体尖刺
+- **基本体组合显隐** — 8 个 Three.js 模型一键统一切换
 
 ### 🧊 路径 2：Marching Cubes（等值面提取）
 
@@ -48,14 +55,29 @@
 ### 🌿 路径 4：L-System / 分形植物
 
 - **6 种预设**：
-  - 🌿 植物 (Plant) — `F+[[X]-X]-F[-FX]+X`
+  - 🌿 植物 (Plant) — 3D 空间多方向分支 `F[&+X][^-X][&X][^+X]`
   - 🐉 龙曲线 (Dragon Curve) — `FX` + `X+YF+` / `-FX-Y`
   - 🔺 谢尔宾斯基 (Sierpinski) — `F-G-G`
-  - 🌳 分形树 (Fractal Tree) — `F[+F]F[-F]F`
+  - 🌳 分形树 (Fractal Tree) — 3D 分支 `F[&+F][^-F][&F][^+F]F`
   - ❄️ 科赫雪花 (Koch Snowflake) — `F++F++F`
-  - 🌿 蕨类植物 (Barnsley Fern)
-- **状态栈** `[ ]` 实现分支递归
-- **TubeGeometry** 管状渲染 + 线框叠加
+  - 🌿 蕨类植物 (Barnsley Fern) — 3D 分支
+- **状态栈** 实现分支递归
+- **圆柱体分段渲染** — 每段独立构建 CylinderGeometry，合并为完整 BufferGeometry
+- **3D 分支** — 植物/树/蕨类预设使用 `&`（俯仰）、`^`、`+`、`-` 实现三维空间分支
+
+### 🖥️ 通用控制面板
+
+所有 3D 页面共享的控制面板（右下角）提供：
+
+| 功能 | 说明 |
+|------|------|
+| 📊 **性能监控** | FPS、内存占用、对象数实时显示 |
+| 💡 **光源控制** | 各光源独立开关 + 全局强度滑块 (0~2x) |
+| 🔄 **动画控制** | 播放/暂停 + 速度滑块 (0~3x) |
+| 🔍 **面板透明度** | 背景透明度滑条 |
+| 📌 **置顶** | 点击置顶按钮后面板不自动收起 |
+
+资料来源面板（左上角 `?` 图标）也支持置顶功能。
 
 ---
 
@@ -82,7 +104,7 @@ procedural-modeling-demo/
 │   │
 │   ├── utils/
 │   │   ├── marchingCubes.js        # Marching Cubes 算法（含完整查找表）
-│   │   └── lsystem.js              # L-System 生成器 + 6 种预设定义
+│   │   └── lsystem.js              # L-System 生成器 + 6 种预设定义（3D 分支）
 │   │
 │   ├── views/
 │   │   ├── Home.vue                # 首页 - 四张导航卡片
@@ -91,7 +113,9 @@ procedural-modeling-demo/
 │   │   ├── ParametricGeometry.vue  # 🌀 路径 3
 │   │   └── LSystem.vue             # 🌿 路径 4
 │   │
-│   └── components/                 # (预留公共组件)
+│   └── components/
+│       ├── ControlPanel.vue        # 右下角控制面板（性能/光源/动画/透明度）
+│       └── InfoPanel.vue           # 左上角信息面板（说明/切换按钮）
 │
 └── public/
     └── favicon.svg                 # 网站图标
@@ -168,7 +192,7 @@ npm run dev
 
 ---
 
-## � Git 克隆 & 提交
+## Git 克隆 & 提交
 
 ```bash
 # 克隆仓库
@@ -184,7 +208,7 @@ npm run dev
 
 ---
 
-## �📚 参考
+## 📚 参考
 
 - [Kimi 分享 - 骨骼绑定与 Three.js 纯函数建模路径](https://www.kimi.com/share/19f8a275-5cf2-807a-8000-00002143699d)
 - [Three.js 官方文档](https://threejs.org/docs/)

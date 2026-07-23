@@ -1,13 +1,18 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const expanded = ref(false)
+const pinned = ref(false)
 const panelRef = ref(null)
 const alpha = ref(0.15)
 const playing = ref(true)
 const speed = ref(1)
 
-const emit = defineEmits(['togglePlay', 'updateSpeed'])
+const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight'])
+
+// 光源控制
+const lightVisible = ref([])
+const lightIntensity = ref(1.0)
 
 function setAlpha(val) {
   alpha.value = val
@@ -24,8 +29,18 @@ function changeSpeed(val) {
   emit('updateSpeed', val)
 }
 
+function toggleLight(idx) {
+  lightVisible.value[idx] = !lightVisible.value[idx]
+  emit('updateLight', { index: idx, visible: lightVisible.value[idx], intensity: lightIntensity.value })
+}
+
+function changeLightIntensity(val) {
+  lightIntensity.value = val
+  emit('updateLight', { index: -1, visible: null, intensity: val })
+}
+
 function onClickOutside(e) {
-  if (expanded.value && panelRef.value && !panelRef.value.contains(e.target)) {
+  if (expanded.value && !pinned.value && panelRef.value && !panelRef.value.contains(e.target)) {
     expanded.value = false
   }
 }
@@ -36,11 +51,17 @@ onMounted(() => {
 })
 onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
-defineProps({
+const props = defineProps({
   fps: { type: Number, default: 0 },
   memory: { type: Number, default: 0 },
   objectCount: { type: Number, default: 0 },
+  lightSources: { type: Array, default: null }, // [{ name: '环境光' }, ...] or null
 })
+
+// Initialize light visibility from prop
+watch(() => props.lightSources, (val) => {
+  if (val) lightVisible.value = val.map(() => true)
+}, { immediate: true })
 </script>
 
 <template>
@@ -59,6 +80,13 @@ defineProps({
       <div v-show="expanded" ref="panelRef" class="control-panel">
         <div class="panel-header">
           <h3>⚙ 控制面板</h3>
+          <button class="pin-btn" :class="{ active: pinned }" @click="pinned = !pinned" :title="pinned ? '取消置顶' : '置顶面板'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="6" r="2.5"/>
+              <line x1="12" y1="8.5" x2="12" y2="15"/>
+              <path d="M9 14l3 5 3-5"/>
+            </svg>
+          </button>
         </div>
 
         <!-- 性能监控 -->
@@ -80,10 +108,31 @@ defineProps({
           </div>
         </div>
 
-        <!-- 模型控制（占位） -->
-        <div class="section">
-          <div class="section-title">🎯 模型控制</div>
-          <div class="placeholder-msg">动态生成 / 显示控制（待实现）</div>
+        <!-- 光源控制 -->
+        <div v-if="lightSources" class="section">
+          <div class="section-title">💡 光源控制</div>
+          <div class="controls-row" style="margin-bottom:0.4rem;">
+            <button
+              v-for="(ls, i) in lightSources"
+              :key="i"
+              class="light-btn"
+              :class="{ active: lightVisible[i] }"
+              @click="toggleLight(i)"
+            >{{ ls.name }}</button>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">亮度</span>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.05"
+              :value="lightIntensity"
+              @input="changeLightIntensity(parseFloat($event.target.value))"
+              class="alpha-slider"
+            />
+            <span class="slider-value">{{ lightIntensity.toFixed(1) }}x</span>
+          </div>
         </div>
 
         <!-- 动画控制 -->
@@ -207,6 +256,63 @@ defineProps({
   font-size: 0.9rem;
   font-weight: 600;
   color: #f0f0ff;
+}
+
+.pin-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.pin-btn:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pin-btn.active {
+  color: #22d3ee;
+}
+
+.pin-btn.active:hover {
+  color: #67e8f9;
+}
+
+/* Light control buttons */
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.light-btn {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.light-btn:hover {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.light-btn.active {
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.4);
 }
 
 .section {

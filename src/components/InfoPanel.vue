@@ -2,10 +2,11 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const collapsed = ref(true)
+const pinned = ref(false)
 const panelRef = ref(null)
 
 function onClickOutside(e) {
-  if (!collapsed.value && panelRef.value && !panelRef.value.contains(e.target)) {
+  if (!collapsed.value && !pinned.value && panelRef.value && !panelRef.value.contains(e.target)) {
     collapsed.value = true
   }
 }
@@ -28,6 +29,13 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
     <!-- 展开状态（无关闭按钮，点击外部关闭） -->
     <template v-else>
       <div ref="panelRef" class="info-panel">
+        <button class="pin-btn" :class="{ active: pinned }" @click="pinned = !pinned" :title="pinned ? '取消置顶' : '置顶面板'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="6" r="2.5"/>
+            <line x1="12" y1="8.5" x2="12" y2="15"/>
+            <path d="M9 14l3 5 3-5"/>
+          </svg>
+        </button>
         <div class="info-panel-body">
           <slot />
         </div>
@@ -77,6 +85,36 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   padding: 1.25rem 1.5rem;
   color: #e0e0e0;
   animation: panelIn 0.3s ease;
+}
+
+.info-panel .pin-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.info-panel .pin-btn:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.info-panel .pin-btn.active {
+  color: #22d3ee;
+}
+
+.info-panel .pin-btn.active:hover {
+  color: #67e8f9;
 }
 
 @keyframes panelIn {

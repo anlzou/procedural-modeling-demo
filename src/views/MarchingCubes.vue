@@ -8,13 +8,31 @@ import ControlPanel from '../components/ControlPanel.vue'
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, mesh, animationId, frameCount = 0, lastFpsTime = 0
+let ambientLight, dirLight, dirLight2
 const fps = ref(0)
 const memory = ref(0)
 const playing = ref(true)
 const speed = ref(1)
 
+const lightSources = [
+  { name: '环境光' },
+  { name: '主光源' },
+  { name: '辅光源' },
+]
+
 function onTogglePlay(val) { playing.value = val }
 function onUpdateSpeed(val) { speed.value = val }
+
+function onUpdateLight({ index, visible, intensity }) {
+  if (index === -1) {
+    if (ambientLight) ambientLight.intensity = 0.5 * intensity
+    if (dirLight) dirLight.intensity = 1.5 * intensity
+    if (dirLight2) dirLight2.intensity = 0.5 * intensity
+  } else {
+    const lights = [ambientLight, dirLight, dirLight2]
+    if (lights[index]) lights[index].visible = visible
+  }
+}
 
 onMounted(() => {
   init()
@@ -51,16 +69,9 @@ function init() {
   controls.autoRotateSpeed = 1.5
 
   // Lights
-  const ambientLight = new THREE.AmbientLight(0x404060, 0.5)
-  scene.add(ambientLight)
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5)
-  dirLight.position.set(5, 10, 7)
-  scene.add(dirLight)
-
-  const dirLight2 = new THREE.DirectionalLight(0x4488ff, 0.5)
-  dirLight2.position.set(-5, -2, -3)
-  scene.add(dirLight2)
+  ambientLight = new THREE.AmbientLight(0x404060, 0.5); scene.add(ambientLight)
+  dirLight = new THREE.DirectionalLight(0xffffff, 1.5); dirLight.position.set(5, 10, 7); scene.add(dirLight)
+  dirLight2 = new THREE.DirectionalLight(0x4488ff, 0.5); dirLight2.position.set(-5, -2, -3); scene.add(dirLight2)
 
   // Generate metaballs
   const mc = new MarchingCubes(48, [
@@ -133,7 +144,7 @@ function animate() {
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="1" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="1" :lightSources="lightSources" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @updateLight="onUpdateLight" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>
