@@ -17,6 +17,19 @@ const playing = ref(true)
 const speed = ref(1)
 const presets = L_SYSTEM_PRESETS
 
+// 生长控制
+const growing = ref(false)
+const growthSpeed = ref(8)
+const growthProgress = ref(0)
+const growthTotal = ref(0)
+let allSegments = []        // 预计算的所有线段
+let lsInstance = null       // 当前的 LSystem 实例
+let presetData = null       // 当前的预设数据
+let growthFrameAccum = 0    // 帧累积器，用于平滑生长
+
+// 仅植物类预设才随机分支数量
+const PLANT_KEYS = new Set(['plant', 'fractalTree', 'barnsley'])
+
 const lightSources = [
   { name: '环境光' },
   { name: '主光源' },
@@ -25,6 +38,38 @@ const lightSources = [
 
 function onTogglePlay(val) { playing.value = val }
 function onUpdateSpeed(val) { speed.value = val }
+
+function onToggleGrowth() {
+  if (growing.value) {
+    growing.value = false
+    return
+  }
+
+  growthProgress.value = 0
+  growthFrameAccum = 0
+
+  const key = currentPreset.value
+
+  if (PLANT_KEYS.has(key)) {
+    // 植物预设：随机选择迭代次数控制分支数量（结构完整）
+    const preset = presets[key]
+    const maxIter = preset.iterations
+    const minIter = Math.max(1, Math.floor(maxIter * 0.5)) // 至少一半迭代
+    const randIter = minIter + Math.floor(Math.random() * (maxIter - minIter + 1))
+
+    // 用随机迭代次数重新生成
+    lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, randIter)
+    allSegments = lsInstance.buildSegments()
+    growthTotal.value = allSegments.length
+  }
+  // 非植物预设：使用预设的完整迭代次数，不变
+
+  growing.value = true
+}
+
+function onUpdateGrowthSpeed(val) {
+  growthSpeed.value = val
+}
 
 function onUpdateLight({ index, visible, intensity }) {
   if (index === -1) {
@@ -89,69 +134,128 @@ function init() {
   window.addEventListener('resize', onResize)
 }
 
-function buildLSystem(key) {
-  // Clear group
+function clearGroup() {
   while (group.children.length > 0) {
     const child = group.children[0]
     group.remove(child)
     if (child.geometry) child.geometry.dispose()
     if (child.material) child.material.dispose()
   }
+}
+
+function buildLSystem(key) {
+  clearGroup()
 
   const preset = presets[key]
   if (!preset) return
 
-  const ls = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, preset.iterations)
+  // 停止生长动画
+  growing.value = false
+  growthProgress.value = 0
 
-  // Try tube geometry first, fall back to line
-  let geometry
+  // 保存预设和 LSystem 实例供后续增量生长使用
+  presetData = preset
+  lsInstance = new LSystem(preset.axiom, preset.rules, preset.angle, preset.length, preset.iterations)
+  allSegments = lsInstance.buildSegments()
+  growthTotal.value = allSegments.length
+
+  // 尝试使用管状几何体
+  let hasValidGeometry = false
   try {
-    geometry = ls.toGeometry()
-    // Check if geometry has valid attributes
+    const geometry = lsInstance.toGeometry()
     if (!geometry.attributes.position || geometry.attributes.position.count < 3) {
-      geometry = ls.toLineGeometry()
-      const material = new THREE.LineBasicMaterial({
-        color: preset.color,
-        linewidth: 1,
-      })
-      const line = new THREE.Line(geometry, material)
-      group.add(line)
-      return
+      // 回退到线条
+      const lineGeo = lsInstance.toLineGeometry()
+      const material = new THREE.LineBasicMaterial({ color: preset.color })
+      group.add(new THREE.Line(lineGeo, material))
+      hasValidGeometry = true
+    } else {
+      // 正常渲染完整模型
+      renderMesh(geometry, preset.color)
+      hasValidGeometry = true
     }
   } catch (e) {
-    geometry = ls.toLineGeometry()
-    const material = new THREE.LineBasicMaterial({
-      color: preset.color,
-      linewidth: 1,
-    })
-    const line = new THREE.Line(geometry, material)
-    group.add(line)
-    return
+    const lineGeo = lsInstance.toLineGeometry()
+    const material = new THREE.LineBasicMaterial({ color: preset.color })
+    group.add(new THREE.Line(lineGeo, material))
+    hasValidGeometry = true
   }
 
-  // Clone geometry for wireframe
+  // 居中视图
+  if (hasValidGeometry) centerViewOnModel()
+}
+
+/**
+ * 从预计算 segments 中增量渲染前 count 段
+ */
+function updateGrowthVisuals() {
+  clearGroup()
+
+  const count = growthProgress.value
+  if (count === 0 || !lsInstance || !presetData) return
+
+  try {
+    const geometry = lsInstance.toGeometryFromSegments(allSegments, count)
+    if (!geometry.attributes.position || geometry.attributes.position.count < 3) return
+    renderMesh(geometry, presetData.color)
+  } catch (e) {
+    // 忽略渲染错误
+  }
+}
+
+/**
+ * 辅助：将几何体添加到组中（带材质和线框）
+ */
+function renderMesh(geometry, color) {
   const wireGeometry = geometry.clone()
 
   const material = new THREE.MeshPhysicalMaterial({
-    color: preset.color,
+    color,
     roughness: 0.4,
     metalness: 0.1,
-    emissive: preset.color,
+    emissive: color,
     emissiveIntensity: 0.05,
   })
 
-  const mesh = new THREE.Mesh(geometry, material)
-  group.add(mesh)
+  group.add(new THREE.Mesh(geometry, material))
 
-  // Thin wireframe overlay
   const wireMat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     wireframe: true,
     transparent: true,
     opacity: 0.1,
   })
-  const wireMesh = new THREE.Mesh(wireGeometry, wireMat)
-  group.add(wireMesh)
+  group.add(new THREE.Mesh(wireGeometry, wireMat))
+}
+
+/**
+ * 计算模型包围盒，将相机视角中心对准模型中部
+ */
+function centerViewOnModel() {
+  if (!group || group.children.length === 0) return
+
+  const box = new THREE.Box3().setFromObject(group)
+  if (box.min.x === Infinity) return
+
+  const center = new THREE.Vector3()
+  box.getCenter(center)
+
+  // 将轨道控制的目标点设为模型中心
+  controls.target.copy(center)
+
+  // 根据模型尺寸调整相机距离以保证完整显示
+  const size = new THREE.Vector3()
+  box.getSize(size)
+  const maxDim = Math.max(size.x, size.y, size.z)
+  const idealDist = maxDim * 1.8
+  const curDir = camera.position.clone().sub(controls.target).normalize()
+  if (curDir.length() > 0.01) {
+    camera.position.copy(controls.target).add(curDir.multiplyScalar(Math.max(idealDist, 3)))
+  } else {
+    camera.position.set(0, maxDim * 0.5, maxDim * 1.8)
+  }
+
+  controls.update()
 }
 
 function switchPreset(key) {
@@ -178,6 +282,20 @@ function animate() {
   if (now - lastFpsTime >= 1000) {
     fps.value = frameCount; frameCount = 0; lastFpsTime = now
     if (window.performance?.memory) memory.value = window.performance.memory.usedJSHeapSize
+  }
+
+  // 生长动画逻辑
+  if (growing.value && allSegments.length > 0 && growthProgress.value < growthTotal.value) {
+    // 随机抖动：每次添加 0.3~1.3 倍基础速度的段数
+    const jitter = 0.3 + Math.random() * 1.0
+    const addCount = Math.max(1, Math.round(growthSpeed.value * jitter))
+    growthProgress.value = Math.min(growthProgress.value + addCount, growthTotal.value)
+    updateGrowthVisuals()
+
+    // 生长完毕
+    if (growthProgress.value >= growthTotal.value) {
+      growing.value = false
+    }
   }
 
   controls.update()
@@ -211,7 +329,7 @@ function animate() {
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="group?.children.length || 0" :lightSources="lightSources" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @updateLight="onUpdateLight" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="group?.children.length || 0" :lightSources="lightSources" :growing="growing" :growthProgress="growthProgress" :growthTotal="growthTotal" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @updateLight="onUpdateLight" @toggleGrowth="onToggleGrowth" @updateGrowthSpeed="onUpdateGrowthSpeed" />
 
     <div ref="canvasRef" class="canvas-container"></div>
   </div>

@@ -128,6 +128,34 @@ export class LSystem {
   }
 
   /**
+   * Build a merged BufferGeometry from the first `count` segments in the array.
+   * Used for incremental growth animation.
+   */
+  toGeometryFromSegments(segments, count) {
+    const validSegments = segments.slice(0, count)
+    if (validSegments.length === 0) return new THREE.BufferGeometry()
+
+    const radius = this.length * 0.1
+    const allVerts = []
+    const allIdx = []
+    let offset = 0
+
+    for (const seg of validSegments) {
+      const cyl = buildCylinder(seg.start, seg.end, radius, 6)
+      if (!cyl) continue
+      for (const v of cyl.verts) allVerts.push(v)
+      for (const i of cyl.idx) allIdx.push(i + offset)
+      offset += cyl.count
+    }
+
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(allVerts, 3))
+    geo.setIndex(allIdx)
+    geo.computeVertexNormals()
+    return geo
+  }
+
+  /**
    * Fallback line-based geometry.
    */
   toLineGeometry() {

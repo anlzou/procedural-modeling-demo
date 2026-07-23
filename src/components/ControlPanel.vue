@@ -8,7 +8,7 @@ const alpha = ref(0.15)
 const playing = ref(true)
 const speed = ref(1)
 
-const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight'])
+const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed'])
 
 // 光源控制
 const lightVisible = ref([])
@@ -39,6 +39,18 @@ function changeLightIntensity(val) {
   emit('updateLight', { index: -1, visible: null, intensity: val })
 }
 
+// 生长控制
+const growthSpeed = ref(8)
+
+function toggleGrowth() {
+  emit('toggleGrowth')
+}
+
+function changeGrowthSpeed(val) {
+  growthSpeed.value = val
+  emit('updateGrowthSpeed', val)
+}
+
 function onClickOutside(e) {
   if (expanded.value && !pinned.value && panelRef.value && !panelRef.value.contains(e.target)) {
     expanded.value = false
@@ -56,6 +68,9 @@ const props = defineProps({
   memory: { type: Number, default: 0 },
   objectCount: { type: Number, default: 0 },
   lightSources: { type: Array, default: null }, // [{ name: '环境光' }, ...] or null
+  growing: { type: Boolean, default: false },
+  growthProgress: { type: Number, default: 0 },
+  growthTotal: { type: Number, default: 0 },
 })
 
 // Initialize light visibility from prop
@@ -161,6 +176,41 @@ watch(() => props.lightSources, (val) => {
               />
               <span class="slider-value">{{ speed.toFixed(1) }}x</span>
             </div>
+          </div>
+        </div>
+
+        <!-- 生长控制 -->
+        <div v-if="growthTotal > 0" class="section">
+          <div class="section-title">🌱 生长控制</div>
+          <div class="anim-row">
+            <button class="play-btn" @click="toggleGrowth" :title="growing ? '暂停生长' : '开始生长'">
+              <svg v-if="growing" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              </svg>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            </button>
+            <div class="speed-row">
+              <span class="slider-label">生长速度</span>
+              <input
+                type="range"
+                min="1"
+                max="60"
+                step="1"
+                :value="growthSpeed"
+                @input="changeGrowthSpeed(parseFloat($event.target.value))"
+                class="alpha-slider"
+              />
+              <span class="slider-value">{{ growthSpeed.toFixed(0) }}</span>
+            </div>
+          </div>
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: (growthTotal > 0 ? (growthProgress / growthTotal * 100) : 0) + '%' }"></div>
+            </div>
+            <span class="progress-label">{{ growthProgress }} / {{ growthTotal }}</span>
           </div>
         </div>
 
@@ -467,6 +517,36 @@ watch(() => props.lightSources, (val) => {
   background: rgba(130, 130, 200, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
+}
+
+/* Progress bar */
+.progress-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #22d3ee, #34d399);
+  transition: width 0.05s linear;
+}
+
+.progress-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Transition */
