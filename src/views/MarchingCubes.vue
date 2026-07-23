@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { MarchingCubes } from '../utils/marchingCubes.js'
+import { MarchingCubes, MC_PRESETS } from '../utils/marchingCubes.js'
 import InfoPanel from '../components/InfoPanel.vue'
 import ControlPanel from '../components/ControlPanel.vue'
 
@@ -13,6 +13,10 @@ const fps = ref(0)
 const memory = ref(0)
 const playing = ref(true)
 const speed = ref(1)
+const currentMode = ref('metaballs')
+
+const presets = MC_PRESETS
+const currentPreset = computed(() => presets[currentMode.value])
 
 const lightSources = [
   { name: '环境光' },
@@ -32,6 +36,52 @@ function onUpdateLight({ index, visible, intensity }) {
     const lights = [ambientLight, dirLight, dirLight2]
     if (lights[index]) lights[index].visible = visible
   }
+}
+
+function rebuildMesh() {
+  const preset = currentPreset.value
+  if (!preset) return
+
+  // Remove old mesh
+  if (mesh) {
+    scene.remove(mesh)
+    mesh.geometry?.dispose()
+    mesh.material?.dispose()
+  }
+
+  const mc = new MarchingCubes(preset.field, preset.resolution, preset.centers, preset.range)
+  const geometry = mc.generate()
+
+  const material = new THREE.MeshPhysicalMaterial({
+    color: preset.color,
+    roughness: 0.2,
+    metalness: 0.6,
+    clearcoat: 0.3,
+    emissive: preset.emissive,
+    emissiveIntensity: 0.1,
+  })
+
+  mesh = new THREE.Mesh(geometry, material)
+  scene.add(mesh)
+
+  // Center view on model
+  const box = new THREE.Box3().setFromObject(mesh)
+  const center = new THREE.Vector3()
+  box.getCenter(center)
+  controls.target.copy(center)
+
+  const size = new THREE.Vector3()
+  box.getSize(size)
+  const maxDim = Math.max(size.x, size.y, size.z)
+  const dist = maxDim * 1.8
+  const dir = camera.position.clone().sub(controls.target).normalize()
+  camera.position.copy(controls.target).add(dir.multiplyScalar(Math.max(dist, 3)))
+  controls.update()
+}
+
+function switchMode(key) {
+  currentMode.value = key
+  rebuildMesh()
 }
 
 onMounted(() => {
@@ -73,26 +123,8 @@ function init() {
   dirLight = new THREE.DirectionalLight(0xffffff, 1.5); dirLight.position.set(5, 10, 7); scene.add(dirLight)
   dirLight2 = new THREE.DirectionalLight(0x4488ff, 0.5); dirLight2.position.set(-5, -2, -3); scene.add(dirLight2)
 
-  // Generate metaballs
-  const mc = new MarchingCubes(48, [
-    { x: 0.0, y: 0.0, z: 0.0, r: 0.5 },
-    { x: 0.5, y: 0.3, z: 0.0, r: 0.4 },
-    { x: -0.4, y: -0.2, z: 0.3, r: 0.35 },
-    { x: 0.2, y: -0.4, z: -0.3, r: 0.3 },
-  ])
-  const geometry = mc.generate()
-
-  const material = new THREE.MeshPhysicalMaterial({
-    color: 0x4fc3f7,
-    roughness: 0.2,
-    metalness: 0.6,
-    clearcoat: 0.3,
-    emissive: 0x1144aa,
-    emissiveIntensity: 0.1,
-  })
-
-  mesh = new THREE.Mesh(geometry, material)
-  scene.add(mesh)
+  // Generate initial mesh
+  rebuildMesh()
 
   // Grid helper
   const gridHelper = new THREE.GridHelper(4, 10, 0x444466, 0x333355)
@@ -137,11 +169,19 @@ function animate() {
         <p><strong>核心原理：</strong>将空间划分为体素网格，采样标量场值，用 Marching Cubes 算法提取等值面生成真实 Mesh。</p>
       </template>
       <div class="features">
-        <span>✓ N×N×N 体素网格细分</span>
-        <span>✓ 256 种配置查表生成三角形</span>
-        <span>✓ Metaball 公式：∑(r²/d²) - 1</span>
-        <span>✓ 实时 OrbitControls 交互</span>
-        <span>✓ 可拖拽旋转查看细节</span>
+        <span>✓ 体素细分 + 256 配置查表</span>
+        <span>✓ Metaball 公式：∑(r²/d²) − 1</span>
+        <span>✓ 三重周期极小曲面 (TPMS)</span>
+        <span>✓ Schwarz P / Gyroid / Diamond 晶格</span>
+      </div>
+      <div class="controls-row">
+        <button
+          v-for="(p, key) in presets"
+          :key="key"
+          class="btn"
+          :class="{ active: currentMode === key }"
+          @click="switchMode(key)"
+        >{{ p.name }}</button>
       </div>
       <p class="hint">🖱 鼠标拖拽旋转 · 滚轮缩放</p>
     </InfoPanel>

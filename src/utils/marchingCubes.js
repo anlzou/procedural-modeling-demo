@@ -295,35 +295,137 @@ const triTable = new Int8Array([
   -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 ])
 
-export class MarchingCubes {
-  constructor(resolution = 32, centers = null) {
-    this.resolution = resolution
-    this.size = resolution
-    this.delta = 2.0 / resolution
-    this.centers = centers || [
-      { x: 0.0, y: 0.0, z: 0.0, r: 0.5 },
-      { x: 0.5, y: 0.3, z: 0.0, r: 0.4 },
-      { x: -0.4, y: -0.2, z: 0.3, r: 0.35 },
-      { x: 0.2, y: -0.4, z: -0.3, r: 0.3 },
-    ]
-  }
-
-  sample(x, y, z) {
+// 标量场函数类型
+const FIELD_TYPES = {
+  /** Metaball 集群：∑(r²/d²) - 1 */
+  metaball: (x, y, z, centers) => {
     let value = 0
-    for (const c of this.centers) {
+    for (const c of centers) {
       const dx = x - c.x, dy = y - c.y, dz = z - c.z
       const d2 = dx * dx + dy * dy + dz * dz
       if (d2 < 0.001) continue
       value += (c.r * c.r) / d2
     }
     return value - 1.0
+  },
+  /** Schwarz P 曲面：cos(x)+cos(y)+cos(z) = 0 三重周期极小曲面 */
+  schwarzP: (x, y, z) => {
+    const s = 2.5
+    return Math.cos(x * s) + Math.cos(y * s) + Math.cos(z * s)
+  },
+  /** Gyroid 曲面：sin(x)cos(y)+sin(y)cos(z)+sin(z)cos(x) = 0 */
+  gyroid: (x, y, z) => {
+    const s = 2.5
+    return Math.sin(x * s) * Math.cos(y * s) +
+           Math.sin(y * s) * Math.cos(z * s) +
+           Math.sin(z * s) * Math.cos(x * s)
+  },
+  /** Diamond 晶格：三重周期金刚石曲面 */
+  diamond: (x, y, z) => {
+    const s = 2.5
+    const sx = Math.sin(x * s), sy = Math.sin(y * s), sz = Math.sin(z * s)
+    const cx = Math.cos(x * s), cy = Math.cos(y * s), cz = Math.cos(z * s)
+    return sx * sy * sz + sx * cy * cz + cx * sy * cz + cx * cy * sz
+  },
+}
+
+// 预设配置
+export const MC_PRESETS = {
+  metaballs: {
+    name: '🧬 Metaball 集群',
+    field: 'metaball',
+    resolution: 48,
+    range: 1.0,
+    color: 0x4fc3f7,
+    emissive: 0x1144aa,
+    centers: [
+      { x: 0.0, y: 0.0, z: 0.0, r: 0.5 },
+      { x: 0.5, y: 0.3, z: 0.0, r: 0.4 },
+      { x: -0.4, y: -0.2, z: 0.3, r: 0.35 },
+      { x: 0.2, y: -0.4, z: -0.3, r: 0.3 },
+    ],
+  },
+  cluster: {
+    name: '🔮 多球聚集',
+    field: 'metaball',
+    resolution: 48,
+    range: 1.2,
+    color: 0xf59e0b,
+    emissive: 0x885500,
+    centers: (() => {
+      const cs = []
+      for (let i = 0; i < 12; i++) {
+        cs.push({
+          x: (Math.random() - 0.5) * 1.2,
+          y: (Math.random() - 0.5) * 1.2,
+          z: (Math.random() - 0.5) * 1.2,
+          r: 0.2 + Math.random() * 0.3,
+        })
+      }
+      return cs
+    })(),
+  },
+  schwarzP: {
+    name: '🧊 Schwarz P 曲面',
+    field: 'schwarzP',
+    resolution: 64,
+    range: 1.0,
+    color: 0xba68c8,
+    emissive: 0x442266,
+    centers: null,
+  },
+  gyroid: {
+    name: '🌀 Gyroid 曲面',
+    field: 'gyroid',
+    resolution: 64,
+    range: 1.0,
+    color: 0x22d3ee,
+    emissive: 0x115566,
+    centers: null,
+  },
+  diamond: {
+    name: '💎 Diamond 晶格',
+    field: 'diamond',
+    resolution: 64,
+    range: 1.0,
+    color: 0x34d399,
+    emissive: 0x115533,
+    centers: null,
+  },
+}
+
+export class MarchingCubes {
+  constructor(fieldType = 'metaball', resolution = 48, centers = null, range = 1.0) {
+    this.fieldType = fieldType
+    this.resolution = resolution
+    this.size = resolution
+    this.range = range
+    this.delta = (range * 2) / resolution
+    this.centers = centers
+    this.fieldFn = FIELD_TYPES[fieldType] || FIELD_TYPES.metaball
+  }
+
+  sample(x, y, z) {
+    const val = this.fieldFn(x, y, z, this.centers)
+    // 软窗口：在边界附近将场值平滑推至负值，使等值面自然终止不被切割
+    const R = this.range
+    const margin = R * 0.15 // 15% 边距用于平滑衰减
+    const effectiveR = R - margin
+    // 计算点到采样体积中心的归一化距离
+    const dx = Math.max(0, Math.abs(x) - effectiveR) / margin
+    const dy = Math.max(0, Math.abs(y) - effectiveR) / margin
+    const dz = Math.max(0, Math.abs(z) - effectiveR) / margin
+    const d = Math.max(dx, dy, dz)
+    if (d <= 0) return val
+    if (d >= 1) return -10 // 边界外远低于等值面
+    // 余弦平滑衰减
+    const fade = Math.cos(d * Math.PI / 2)
+    return val * fade - 0.5 * (1 - fade)
   }
 
   generate() {
     const positions = []
     const normals = []
-    const indices = []
-    let indexCount = 0
 
     const res = this.resolution
     const delta = this.delta
@@ -331,15 +433,16 @@ export class MarchingCubes {
     for (let x = 0; x < res; x++) {
       for (let y = 0; y < res; y++) {
         for (let z = 0; z < res; z++) {
+          const R = this.range
           const p = [
-            [x * delta - 1, y * delta - 1, z * delta - 1],
-            [(x + 1) * delta - 1, y * delta - 1, z * delta - 1],
-            [(x + 1) * delta - 1, (y + 1) * delta - 1, z * delta - 1],
-            [x * delta - 1, (y + 1) * delta - 1, z * delta - 1],
-            [x * delta - 1, y * delta - 1, (z + 1) * delta - 1],
-            [(x + 1) * delta - 1, y * delta - 1, (z + 1) * delta - 1],
-            [(x + 1) * delta - 1, (y + 1) * delta - 1, (z + 1) * delta - 1],
-            [x * delta - 1, (y + 1) * delta - 1, (z + 1) * delta - 1],
+            [x * delta - R, y * delta - R, z * delta - R],
+            [(x + 1) * delta - R, y * delta - R, z * delta - R],
+            [(x + 1) * delta - R, (y + 1) * delta - R, z * delta - R],
+            [x * delta - R, (y + 1) * delta - R, z * delta - R],
+            [x * delta - R, y * delta - R, (z + 1) * delta - R],
+            [(x + 1) * delta - R, y * delta - R, (z + 1) * delta - R],
+            [(x + 1) * delta - R, (y + 1) * delta - R, (z + 1) * delta - R],
+            [x * delta - R, (y + 1) * delta - R, (z + 1) * delta - R],
           ]
 
           const values = p.map(pt => this.sample(pt[0], pt[1], pt[2]))
@@ -384,22 +487,91 @@ export class MarchingCubes {
             const ny = e1[2] * e2[0] - e1[0] * e2[2]
             const nz = e1[0] * e2[1] - e1[1] * e2[0]
             const len = Math.sqrt(nx * nx + ny * ny + nz * nz)
+            if (len < 1e-10) continue // skip degenerate
 
-            positions.push(...v0, ...v1, ...v2)
             const nnx = nx / len, nny = ny / len, nnz = nz / len
+            positions.push(...v0, ...v1, ...v2)
             normals.push(nnx, nny, nnz, nnx, nny, nnz, nnx, nny, nnz)
-            indices.push(indexCount, indexCount + 1, indexCount + 2)
-            indexCount += 3
           }
         }
       }
     }
 
+    // 顶点法线平滑：合并相同位置的顶点，平均法线
+    // 使用哈希表按位置分组，精度 4 位小数
+    const posKey = (arr, i) =>
+      arr[i*3].toFixed(4) + ',' + arr[i*3+1].toFixed(4) + ',' + arr[i*3+2].toFixed(4)
+
+    const posArr = new Float32Array(positions)
+    const normArr = new Float32Array(normals)
+    const vertCount = positions.length / 3
+    const smoothNormals = new Float32Array(normals.length)
+    const normalMap = new Map() // key → [sumX, sumY, sumZ, count]
+
+    // 第一遍：累加法线
+    for (let i = 0; i < vertCount; i++) {
+      const key = posKey(posArr, i)
+      let entry = normalMap.get(key)
+      if (!entry) {
+        entry = [0, 0, 0, 0]
+        normalMap.set(key, entry)
+      }
+      entry[0] += normArr[i * 3]
+      entry[1] += normArr[i * 3 + 1]
+      entry[2] += normArr[i * 3 + 2]
+      entry[3]++
+    }
+
+    // 第二遍：写入平均法线
+    for (let i = 0; i < vertCount; i++) {
+      const key = posKey(posArr, i)
+      const entry = normalMap.get(key)
+      const inv = 1 / entry[3]
+      const nx = entry[0] * inv, ny = entry[1] * inv, nz = entry[2] * inv
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz)
+      if (len > 1e-10) {
+        smoothNormals[i * 3] = nx / len
+        smoothNormals[i * 3 + 1] = ny / len
+        smoothNormals[i * 3 + 2] = nz / len
+      } else {
+        smoothNormals[i * 3] = normArr[i * 3]
+        smoothNormals[i * 3 + 1] = normArr[i * 3 + 1]
+        smoothNormals[i * 3 + 2] = normArr[i * 3 + 2]
+      }
+    }
+
+    // 三角面绕序修正：检测法线朝内的三角面并翻转顶点顺序
+    // 使得所有三角面面向外，避免背面剔除
+    const triCount = vertCount / 3
+    for (let t = 0; t < triCount; t++) {
+      const i0 = t * 9, i1 = t * 9 + 3, i2 = t * 9 + 6
+      // 顶点位置
+      const ax = posArr[i0], ay = posArr[i0 + 1], az = posArr[i0 + 2]
+      const bx = posArr[i1], by = posArr[i1 + 1], bz = posArr[i1 + 2]
+      const cx = posArr[i2], cy = posArr[i2 + 1], cz = posArr[i2 + 2]
+      // 面法线（叉积）
+      const e1x = bx - ax, e1y = by - ay, e1z = bz - az
+      const e2x = cx - ax, e2y = cy - ay, e2z = cz - az
+      const fnx = e1y * e2z - e1z * e2y
+      const fny = e1z * e2x - e1x * e2z
+      const fnz = e1x * e2y - e1y * e2x
+      // 平滑法线（取三个顶点的平均）
+      const snx = (smoothNormals[i0] + smoothNormals[i1] + smoothNormals[i2]) / 3
+      const sny = (smoothNormals[i0 + 1] + smoothNormals[i1 + 1] + smoothNormals[i2 + 1]) / 3
+      const snz = (smoothNormals[i0 + 2] + smoothNormals[i1 + 2] + smoothNormals[i2 + 2]) / 3
+      // 面法线与平滑法线方向相反 → 翻转绕序
+      if (fnx * snx + fny * sny + fnz * snz < 0) {
+        // 交换 v1 和 v2（同时交换位置和法线）
+        for (let k = 0; k < 3; k++) {
+          const tmpP = posArr[i1 + k]; posArr[i1 + k] = posArr[i2 + k]; posArr[i2 + k] = tmpP
+          const tmpN = smoothNormals[i1 + k]; smoothNormals[i1 + k] = smoothNormals[i2 + k]; smoothNormals[i2 + k] = tmpN
+        }
+      }
+    }
+
     const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
-    geometry.setIndex(indices)
-    geometry.computeVertexNormals()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3))
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(smoothNormals, 3))
     return geometry
   }
 }
