@@ -32,13 +32,20 @@ const paths = [
     icon: '🌿',
     color: '#16a34a',
   },
+  {
+    id: 'css3d',
+    title: 'CSS3D 渲染',
+    desc: 'CSS3DRenderer 将 HTML 元素渲染到 3D 空间，支持多种 CSS3D 模型',
+    icon: '🧪',
+    color: '#06b6d4',
+  },
 ]
 </script>
 
 <template>
   <div class="home">
     <header class="hero">
-      <h1>🎨 四大纯函数建模路径</h1>
+      <h1>🎨 程序化 3D 生成演示</h1>
       <p class="subtitle">基于 Vue 3 + Three.js 的 3D 程序化生成演示</p>
     </header>
 

@@ -216,6 +216,9 @@ watch(() => props.lightSources, (val) => {
             </div>
           </div>
 
+          <!-- 自定义插槽（用于 CSS3D 布局按钮等） -->
+          <slot name="extra" />
+
           <!-- 面板透明度 -->
           <div class="section">
             <div class="section-title">🔍 面板透明度</div>
@@ -598,5 +601,48 @@ watch(() => props.lightSources, (val) => {
     width: calc(100vw - 2rem);
     max-width: 320px;
   }
+}
+
+/* 插槽内样式统一（:deep 穿透作用于父组件投射的内容） */
+:deep(.section) {
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+:deep(.section-title) {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+:deep(.layout-row) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+:deep(.layout-btn) {
+  flex: 0 0 calc(50% - 0.25rem);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  text-align: center;
+  box-sizing: border-box;
+}
+:deep(.layout-btn:hover) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+:deep(.layout-btn.active) {
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.4);
+  background: rgba(34, 211, 238, 0.06);
 }
 </style>

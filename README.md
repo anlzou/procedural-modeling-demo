@@ -1,14 +1,14 @@
-# 🎨 procedural-modeling-demo（程序化建模）
+# 🎨 procedural-modeling-demo（程序化 3D 生成演示）
 
-> 基于 **Vue 3 + Vite + Three.js** 的 3D 程序化生成演示项目，展示四种纯函数建模技术。
+> 基于 **Vue 3 + Vite + Three.js** 的 3D 程序化生成演示项目，展示多种 3D 建模技术。
 
 ---
 
 ## 📖 简介
 
-使用 **Vue 3 + Vite + Three.js** 实现四种纯函数建模路径，每个路径都配有可交互的 Demo 页面。
+使用 **Vue 3 + Vite + Three.js** 实现 5 种 3D 渲染/建模路径，每个路径都配有可交互的 Demo 页面。
 
-**四种建模路径：**
+**路径一览：**
 
 | 路径 | 核心思想 | 特点 |
 |------|---------|------|
@@ -16,6 +16,7 @@
 | 🧊 **Marching Cubes** | 等值面提取算法 | 真实 Mesh，5 种场函数 |
 | 🌀 **Parametric Geometry** | 参数化曲面 f(u,v)→(x,y,z) | 精确数学控制，适合艺术曲面 |
 | 🌿 **L-System / 分形** | 字符串重写规则生成递归结构 | 12 种预设，生长动画 |
+| 🧪 **CSS3D 渲染** | CSS3DRenderer 将 HTML 渲染到 3D 空间 | 4 种布局，TWEEN 动画 |
 
 ---
 
@@ -77,6 +78,22 @@
 - **双符号绘制**：`F` 绘制树干/枝条，`G` 绘制树叶（不同长度、不同颜色）
 - **视图自动居中** — 根据模型包围盒调整相机位置
 
+### 🧪 路径 5：CSS3D 渲染
+
+- **CSS3DRenderer** — Three.js 的 CSS3D 渲染器，将 HTML 元素渲染到 3D 空间
+- **CSS3DObject** — 将 DOM 元素包裹为 3D 物体，支持位置/旋转/缩放
+- **TrackballControls** — 自由轨道控制相机
+- **四种布局动画**：
+  - 📋 **TABLE** — 二维元素周期表布局
+  - 🌐 **SPHERE** — 斐波那契球面分布
+  - 🌀 **HELIX** — 螺旋线分布
+  - 📦 **GRID** — 三维网格分布
+- **TWEEN 平滑过渡** — Exponential.InOut 缓动，每次布局切换随机时长 2~4s
+- **自动旋转动画** — 支持播放/暂停 + 速度控制
+- **模型列表** — 可扩展架构，当前模型：
+  - 🧪 **元素周期表** — 118 种化学元素卡片，含原子序数、符号、名称、质量
+- **可横向扩展** — 后续 CSS3D 模型只需在 `css3dModels` 对象中追加
+
 ### 🖥️ 通用控制面板
 
 所有 3D 页面共享的控制面板（右下角）提供：
@@ -87,6 +104,7 @@
 | 💡 **光源控制** | 各光源独立开关 + 全局强度滑块 (0~2x) |
 | 🔄 **动画控制** | 播放/暂停 + 速度滑块 (0~3x) |
 | 🌱 **生长控制** | LSystem 页面：生长播放/暂停 + 速度滑块 + 进度条 |
+| 🎯 **布局切换** | CSS3D 页面：TABLE / SPHERE / HELIX / GRID 四布局（插槽） |
 | 🔍 **面板透明度** | 背景透明度滑条 |
 | 📌 **置顶** | 点击置顶按钮后面板不自动收起 |
 
@@ -148,6 +166,7 @@ procedural-modeling-demo/
 | [Vite](https://vitejs.dev/) | ^8.1+ | 构建工具 |
 | [Three.js](https://threejs.org/) | ^0.185+ | 3D 渲染引擎 |
 | [Vue Router](https://router.vuejs.org/) | ^4.6+ | 前端路由 |
+| [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) | ^25+ | CSS3D 布局过渡动画 |
 
 ---
 
@@ -196,11 +215,12 @@ mkdir -p src/router src/views src/components src/utils src/shaders
 
 | 路径 | 组件 | 说明 |
 |------|------|------|
-| `/` | `Home.vue` | 首页，四张导航卡片 |
+| `/` | `Home.vue` | 首页，导航卡片 |
 | `/sdf-raymarching` | `SDFRaymarching.vue` | SDF + Raymarching |
 | `/marching-cubes` | `MarchingCubes.vue` | Marching Cubes |
 | `/parametric` | `ParametricGeometry.vue` | 参数化曲面 |
 | `/lsystem` | `LSystem.vue` | L-System 分形 |
+| `/css3d` | `CSS3DRenderer.vue` | CSS3D 渲染 |
 
 ---
 
@@ -263,5 +283,7 @@ npm run dev
 
 - [Kimi 分享 - 骨骼绑定与 Three.js 纯函数建模路径](https://www.kimi.com/share/19f8a275-5cf2-807a-8000-00002143699d)
 - [Three.js 官方文档](https://threejs.org/docs/)
+- [Three.js CSS3D Periodic Table 示例](https://threejs.org/examples/#css3d_periodictable) — 元素周期表布局与 TWEEN 动画来源
 - [Vue 3 官方文档](https://vuejs.org/guide/introduction.html)
 - [Vite 官方文档](https://vitejs.dev/guide/)
+- [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) — JavaScript 平滑动画效果库
