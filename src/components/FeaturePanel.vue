@@ -75,6 +75,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 }
 
 .fp-toggle {
+  position: absolute;
+  bottom: 0;
   pointer-events: auto;
   width: 44px;
   height: 44px;
@@ -108,8 +110,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   border-radius: 14px;
   color: #d0d0e0;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+  overflow: visible;
   transform-origin: bottom center;
+  position: absolute;
+  bottom: 0;
 }
 
 .fp-header {
@@ -159,10 +163,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 /* 面板缩放弹出 */
 .pop-panel-enter-active {
-  animation: popIn 0.3s ease;
+  animation: popIn 0.4s ease;
 }
 .pop-panel-leave-active {
-  animation: popOut 0.2s ease;
+  animation: popOut 0.3s ease;
 }
 
 @keyframes popIn {
@@ -170,9 +174,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
     opacity: 0;
     transform: scale(0);
   }
-  80% {
+  70% {
     opacity: 1;
-    transform: scale(1.04);
+    transform: scale(1.06);
   }
   100% {
     opacity: 1;

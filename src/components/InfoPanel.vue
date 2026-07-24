@@ -61,6 +61,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 }
 
 .circle-btn {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -83,10 +86,14 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 }
 
 .info-panel {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   display: flex;
   flex-direction: column;
   max-height: 55vh;
+  width: 400px;
+  max-width: 90vw;
   background: rgba(0, 0, 0, var(--panel-alpha, 0.65));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -182,10 +189,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 /* 面板缩放弹出 */
 .pop-panel-enter-active {
-  animation: popIn 0.3s ease;
+  animation: popIn 0.4s ease;
 }
 .pop-panel-leave-active {
-  animation: popOut 0.2s ease;
+  animation: popOut 0.3s ease;
 }
 
 @keyframes popIn {
@@ -193,9 +200,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
     opacity: 0;
     transform: scale(0);
   }
-  80% {
+  70% {
     opacity: 1;
-    transform: scale(1.04);
+    transform: scale(1.06);
   }
   100% {
     opacity: 1;
