@@ -91,7 +91,7 @@ watch(() => props.lightSources, (val) => {
     </button>
 
     <!-- 面板（无关闭按钮，点击外部关闭） -->
-    <Transition name="slide">
+    <Transition name="pop-panel">
       <div v-show="expanded" ref="panelRef" class="control-panel">
         <div class="panel-header">
           <h3>⚙ 控制面板</h3>

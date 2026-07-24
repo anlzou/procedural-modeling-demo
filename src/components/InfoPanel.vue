@@ -16,19 +16,21 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 </script>
 
 <template>
-  <div class="info-panel-wrapper" :class="{ collapsed }">
+  <div class="info-panel-wrapper">
     <!-- 折叠状态：? 图标按钮 -->
-    <button v-if="collapsed" class="circle-btn" @click="collapsed = false" title="展开信息">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-        <path d="M12 17h.01"/>
-      </svg>
-    </button>
+    <Transition name="pop-btn">
+      <button v-show="collapsed" class="circle-btn" @click="collapsed = false" title="展开信息">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <path d="M12 17h.01"/>
+        </svg>
+      </button>
+    </Transition>
 
     <!-- 展开状态（无关闭按钮，点击外部关闭） -->
-    <template v-else>
-      <div ref="panelRef" class="info-panel">
+    <Transition name="pop-panel">
+      <div v-show="!collapsed" ref="panelRef" class="info-panel">
         <button class="pin-btn" :class="{ active: pinned }" @click="pinned = !pinned" :title="pinned ? '取消置顶' : '置顶面板'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="6" r="2.5"/>
@@ -45,7 +47,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
           </div>
         </div>
       </div>
-    </template>
+    </Transition>
   </div>
 </template>
 
@@ -92,7 +94,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   border-radius: 14px;
   padding: 1.25rem 1.5rem;
   color: #e0e0e0;
-  animation: panelIn 0.3s ease;
+  transform-origin: top left;
 }
 
 .info-panel-body {
@@ -162,14 +164,52 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   color: #67e8f9;
 }
 
-@keyframes panelIn {
-  from {
+/* 按钮缩放淡出（展开时按钮消失） */
+.pop-btn-leave-active {
+  transition: all 0.25s ease;
+}
+.pop-btn-enter-active {
+  transition: all 0.25s ease;
+}
+.pop-btn-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+.pop-btn-enter-from {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+/* 面板缩放弹出 */
+.pop-panel-enter-active {
+  animation: popIn 0.3s ease;
+}
+.pop-panel-leave-active {
+  animation: popOut 0.2s ease;
+}
+
+@keyframes popIn {
+  0% {
     opacity: 0;
-    transform: translateY(-8px) scale(0.97);
+    transform: scale(0);
   }
-  to {
+  80% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes popOut {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0);
   }
 }
 
