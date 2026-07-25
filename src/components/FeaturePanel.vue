@@ -93,8 +93,9 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 .feature-panel {
   pointer-events: auto;
-  min-width: 320px;
-  max-width: 90vw;
+  width: fit-content;
+  min-width: 200px;
+  max-width: min(90vw, 480px);
   background: rgba(10, 10, 20, var(--panel-alpha, 0.6));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
