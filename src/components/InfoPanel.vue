@@ -49,7 +49,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 
 <style scoped>
 .info-panel-wrapper {
-  position: absolute;
+  position: fixed;
   top: 4.2rem;
   left: 0.5rem;
   z-index: 10;

@@ -245,7 +245,7 @@ watch(() => props.lightSources, (val) => {
 
 <style scoped>
 .control-panel-wrapper {
-  position: absolute;
+  position: fixed;
   bottom: 1rem;
   right: 1rem;
   z-index: 10;
