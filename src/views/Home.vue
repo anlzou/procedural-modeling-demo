@@ -53,12 +53,19 @@ const paths = [
     color: '#16a34a',
   },
   {
-    id: 'css3d',
-    title: 'CSS3D 渲染',
-    desc: 'CSS3DRenderer 将 HTML 元素渲染到 3D 空间，支持多种 CSS3D 模型',
+    id: 'periodic-table',
+    title: 'CSS3D 实现的元素周期表',
+    desc: '使用 Three.js CSS3DRenderer 将 HTML 元素渲染到 3D 空间，展示元素周期表',
     icon: '🧪',
     color: '#06b6d4',
   },
+  {
+    id: 'product-showcase',
+    title: 'CSS3D 实现的产品展示',
+    desc: '使用 Three.js CSS3DRenderer 将 HTML 元素渲染到 3D 空间，展示产品模型',
+    icon: '🛍️',
+    color: '#8b5cf6',
+  }
 ]
 </script>
 
