@@ -8,7 +8,7 @@ const alpha = ref(0.15)
 const playing = ref(true)
 const speed = ref(1)
 
-const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed'])
+const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed', 'updateCardBrightness', 'updateGlassBrightness', 'updateCardColor', 'updateGlassColor', 'resetLights'])
 
 // 光源控制
 const lightVisible = ref([])
@@ -71,6 +71,10 @@ const props = defineProps({
   growing: { type: Boolean, default: false },
   growthProgress: { type: Number, default: 0 },
   growthTotal: { type: Number, default: 0 },
+  cardBrightness: { type: Number, default: 1 },
+  glassBrightness: { type: Number, default: 1 },
+  cardColor: { type: String, default: '#64dcff' },
+  glassColor: { type: String, default: '#64dcff' },
 })
 
 // Initialize light visibility from prop
@@ -179,6 +183,30 @@ watch(() => props.lightSources, (val) => {
                 <span class="slider-value">{{ speed.toFixed(1) }}x</span>
               </div>
             </div>
+          </div>
+
+          <!-- 模型灯光控制 -->
+          <div class="section">
+            <div class="section-title">🎨 模型灯光</div>
+            <div class="light-control-row">
+              <span class="lc-label">📦 卡片亮度</span>
+              <input type="range" min="0" max="2" step="0.05" :value="cardBrightness" @input="$emit('updateCardBrightness', parseFloat($event.target.value))" class="alpha-slider" />
+              <span class="slider-value">{{ cardBrightness.toFixed(1) }}x</span>
+            </div>
+            <div class="light-control-row">
+              <span class="lc-label">🗄️ 展柜亮度</span>
+              <input type="range" min="0" max="2" step="0.05" :value="glassBrightness" @input="$emit('updateGlassBrightness', parseFloat($event.target.value))" class="alpha-slider" />
+              <span class="slider-value">{{ glassBrightness.toFixed(1) }}x</span>
+            </div>
+            <div class="light-control-row color-row">
+              <span class="lc-label">📦 卡片颜色</span>
+              <input type="color" :value="cardColor" @input="$emit('updateCardColor', $event.target.value)" class="color-picker" />
+            </div>
+            <div class="light-control-row color-row">
+              <span class="lc-label">🗄️ 展柜颜色</span>
+              <input type="color" :value="glassColor" @input="$emit('updateGlassColor', $event.target.value)" class="color-picker" />
+            </div>
+            <button class="reset-btn" @click="$emit('resetLights')">🔄 重置灯光</button>
           </div>
 
           <!-- 生长控制 -->
@@ -388,6 +416,63 @@ watch(() => props.lightSources, (val) => {
 .light-btn.active {
   color: #22d3ee;
   border-color: rgba(34, 211, 238, 0.4);
+}
+
+.light-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+.light-control-row .lc-label {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  min-width: 5.5em;
+  flex-shrink: 0;
+}
+.light-control-row .alpha-slider {
+  flex: 1;
+  min-width: 0;
+}
+.light-control-row .slider-value {
+  min-width: 2.8em;
+  text-align: right;
+}
+.color-row {
+  margin-top: 0.2rem;
+}
+.color-picker {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+.color-picker::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+.reset-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: rgba(255,255,255,0.4);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.reset-btn:hover {
+  color: #22d3ee;
+  border-color: rgba(34,211,238,0.4);
+  background: rgba(34,211,238,0.08);
 }
 
 .section {

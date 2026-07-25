@@ -15,6 +15,7 @@ const containerRef = ref(null)
 let scene, camera, webglRenderer, css3dRenderer, composer, controls, animationId
 let particles, pointLight, pointLight2, css3dObject, cardElement, glassObject
 let frameCount = 0, lastFpsTime = 0
+const glitchState = { bursting: false, burstStart: 0, burstDuration: 0, flickerSpeed: 0, nextTrigger: 3 }
 const fps = ref(0)
 const memory = ref(0)
 const objectCount = ref(1)
@@ -22,7 +23,14 @@ const playing = ref(true)
 const speed = ref(1)
 const cardVisible = ref(true)
 const glassVisible = ref(true)
+const cardBrightness = ref(1)
+const glassBrightness = ref(1)
+const cardLightColor = ref('#64dcff')
+const glassLightColor = ref('#64dcff')
 const clock = new THREE.Clock()
+
+// 存储玻璃盒内部元素引用以便动态更新颜色
+let glassRingLight, glassInnerGlow, glassCubeFaces = [], glassBottom, glassBottomText, glassOrbitRing
 
 function toggleCard() {
   cardVisible.value = !cardVisible.value
@@ -39,6 +47,75 @@ function updateObjectCount() {
   if (cardVisible.value) count++
   if (glassVisible.value) count++
   objectCount.value = count
+}
+
+function updateCardLight(brightness, color) {
+  if (brightness !== undefined) cardBrightness.value = brightness
+  if (color !== undefined) cardLightColor.value = color
+  const b = cardBrightness.value
+  const c = color || cardLightColor.value
+  if (cardElement) {
+    if (cardElement.backLight) {
+      const bc = new THREE.Color(c)
+      cardElement.backLight.style.opacity = 0.75 * b
+      cardElement.backLight.style.background = `linear-gradient(135deg, rgba(${bc.r*255|0},${bc.g*255|0},${bc.b*255|0},${0.35*b}), rgba(${bc.r*255|0},${bc.g*255|0},${bc.b*255|0},${0.2*b}))`
+      cardElement.backLight.style.boxShadow = `0 0 120px rgba(${bc.r*255|0},${bc.g*255|0},${bc.b*255|0},${0.5*b}), inset 0 0 100px rgba(${bc.r*255|0},${bc.g*255|0},${bc.b*255|0},${0.35*b})`
+    }
+    if (cardElement.frontGlow) {
+      const fc = new THREE.Color(c)
+      cardElement.frontGlow.style.opacity = 0.35 * b
+      cardElement.frontGlow.style.background = `linear-gradient(135deg, rgba(${fc.r*255|0},${fc.g*255|0},${fc.b*255|0},${0.15*b}), rgba(${fc.r*255|0},${fc.g*255|0},${fc.b*255|0},${0.08*b}))`
+      cardElement.frontGlow.style.boxShadow = `inset 0 0 80px rgba(${fc.r*255|0},${fc.g*255|0},${fc.b*255|0},${0.2*b})`
+    }
+  }
+}
+function updateGlassLight(brightness, color) {
+  if (brightness !== undefined) glassBrightness.value = brightness
+  if (color !== undefined) glassLightColor.value = color
+  const b = glassBrightness.value
+  const c = color || glassLightColor.value
+  const col = new THREE.Color(c)
+  const r = col.r * 255 | 0, g = col.g * 255 | 0, bb = col.b * 255 | 0
+  const rc = `rgba(${r},${g},${bb}`
+
+  // 更新 CSS 变量（影响 breatheLight / ringPulse / cubeGlow 动画）
+  document.documentElement.style.setProperty('--gr', r)
+  document.documentElement.style.setProperty('--gg', g)
+  document.documentElement.style.setProperty('--gb', bb)
+
+  // 圆环灯带（最强光源）
+  if (glassRingLight) {
+    glassRingLight.style.borderColor = `${rc},${0.9*b})`
+    glassRingLight.style.boxShadow = `0 0 ${20*b}px ${rc},${0.8*b}), 0 0 ${60*b}px ${rc},${0.5*b}), 0 0 ${100*b}px ${rc},${0.3*b}), inset 0 0 ${15*b}px ${rc},${0.5*b}), inset 0 0 ${50*b}px ${rc},${0.2*b})`
+  }
+  // 内圈光晕（最强光源）
+  if (glassInnerGlow) {
+    glassInnerGlow.style.background = `radial-gradient(circle, ${rc},${0.35*b}) 0%, ${rc},${0.1*b}) 40%, transparent 70%)`
+  }
+  // 内部立方体各面（背景+边框+发光）
+  glassCubeFaces.forEach((face, i) => {
+    const alphas = [0.15, 0.1, 0.08, 0.08, 0.12, 0.12]
+    face.style.background = `${rc},${alphas[i] || 0.1})`
+    face.style.borderColor = `${rc},${0.3*b})`
+    face.style.boxShadow = `inset 0 0 20px ${rc},${0.1*b})`
+  })
+  // 底面呼吸灯底座
+  if (glassBottom) {
+    glassBottom.style.borderColor = `${rc},${0.15*b})`
+    glassBottom.style.boxShadow = `0 0 ${30*b}px ${rc},${0.3*b}), inset 0 0 ${20*b}px ${rc},${0.1*b})`
+  }
+  // 底面文字
+  if (glassBottomText) {
+    glassBottomText.style.color = `${rc},${0.4*b})`
+  }
+  // 外圈轨道环
+  if (glassOrbitRing) {
+    glassOrbitRing.style.borderColor = `${rc},${0.15*b})`
+  }
+}
+function resetLights() {
+  updateCardLight(1, '#64dcff')
+  updateGlassLight(1, '#64dcff')
 }
 
 function onTogglePlay(val) { playing.value = val; if (controls) controls.autoRotate = val }
@@ -215,6 +292,7 @@ function createProductCard() {
 
   faces.forEach(f => {
     const div = document.createElement('div')
+    if (f.name === 'front' || f.name === 'back') div.setAttribute('data-face', f.name)
     div.style.cssText = `position:absolute;width:${f.size ? f.size.split(',')[0] : '300px'};height:${f.size ? f.size.split(',')[1] : '400px'};backface-visibility:visible;border:${f.name === 'front' || f.name === 'back' ? '1px solid rgba(255,255,255,0.1)' : 'none'};transform:${f.css};border-radius:${f.name === 'front' || f.name === 'back' ? '16px' : '0'};`
     if (f.name === 'front') {
       div.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))'
@@ -224,6 +302,25 @@ function createProductCard() {
     } else if (f.name === 'back') {
       div.style.background = 'linear-gradient(135deg, #1a1a2e, #16213e)'
       div.innerHTML = f.html
+      // 背部故障灯光覆盖层 - 整面发光，向正面发散
+      const backLight = document.createElement('div')
+      backLight.style.cssText = `position:absolute;inset:0;border-radius:16px;pointer-events:none;opacity:0.75;transition:none;
+        background:linear-gradient(135deg, rgba(100,220,255,0.35), rgba(80,180,255,0.2));
+        box-shadow:0 0 120px rgba(100,220,255,0.5), inset 0 0 100px rgba(100,220,255,0.35);`
+      div.appendChild(backLight)
+      card.backLight = backLight
+
+      // 正面透光覆盖层 - 整面透光
+      const frontGlow = document.createElement('div')
+      frontGlow.style.cssText = `position:absolute;inset:0;border-radius:16px;pointer-events:none;opacity:0.35;transition:none;
+        background:linear-gradient(135deg, rgba(100,220,255,0.15), rgba(80,180,255,0.08));
+        box-shadow:inset 0 0 80px rgba(100,220,255,0.2);`
+      card.frontGlow = frontGlow
+      // 插入到 front 面
+      setTimeout(() => {
+        const frontDiv = card.querySelector('[data-face="front"]')
+        if (frontDiv) frontDiv.appendChild(frontGlow)
+      }, 0)
     } else if (f.name === 'bottom') {
       div.style.boxShadow = '0 20px 60px rgba(0,0,0,0.8)'
       div.style.background = 'rgba(255,255,255,0.05)'
@@ -310,6 +407,8 @@ function createGlassCase() {
   `
   box.appendChild(innerGlow)
   box.appendChild(ringLight)
+  glassRingLight = ringLight
+  glassInnerGlow = innerGlow
 
   // 内部展示正方体（受呼吸灯光效影响）
   const cubeSize = 80
@@ -326,23 +425,32 @@ function createGlassCase() {
     { css: `rotateX(90deg) translateZ(${cs}px)`, bg: 'rgba(100,200,255,0.12)' },
     { css: `rotateX(-90deg) translateZ(${cs}px)`, bg: 'rgba(100,200,255,0.12)' },
   ]
+  const cubeFacesArr = []
   cubeFaces.forEach(f => {
     const face = document.createElement('div')
     face.style.cssText = `position:absolute;width:${cubeSize}px;height:${cubeSize}px;backface-visibility:visible;border:1px solid rgba(100,220,255,0.3);transform:${f.css};background:${f.bg};box-shadow:inset 0 0 20px rgba(100,220,255,0.1);animation:cubeGlow 2s ease-in-out infinite;`
     cube.appendChild(face)
+    cubeFacesArr.push(face)
   })
   box.appendChild(cube)
+  glassCubeFaces = cubeFacesArr
 
   // 底面 - 磨砂底座 + 呼吸灯
   const bottom = document.createElement('div')
   bottom.style.cssText = `position:absolute;width:${w}px;height:${d}px;transform:rotateX(-90deg) translateZ(${hh+100}px);background:linear-gradient(135deg,#1a1a2e,#2a1a3e);border:1px solid rgba(100,200,255,0.15);border-radius:4px;box-shadow:0 0 30px rgba(100,200,255,0.3),inset 0 0 20px rgba(100,200,255,0.1);animation:breatheLight 2s ease-in-out infinite;display:flex;align-items:center;justify-content:center;`
+  const bottomText = document.createElement('span')
+  bottomText.style.cssText = 'font-size:10px;color:rgba(100,200,255,0.4);text-align:center;line-height:1.4;pointer-events:none;'
+  bottom.appendChild(bottomText)
   box.appendChild(bottom)
+  glassBottom = bottom
+  glassBottomText = bottomText
 
   // 光圈（轨道环）
   const ring = document.createElement('div')
   const ringSize = 500
   ring.style.cssText = `position:absolute;width:${ringSize}px;height:${ringSize}px;border:2px solid rgba(100,200,255,0.15);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%) rotateX(75deg);animation:orbit 12s linear infinite;pointer-events:none;`
   box.appendChild(ring)
+  glassOrbitRing = ring
 
   return box
 }
@@ -374,6 +482,37 @@ function animate() {
   if (glassObject) glassObject.position.y = Math.sin(time) * 20
   if (pointLight) pointLight.intensity = 2 + Math.sin(time * 2) * 0.5
   if (pointLight2) pointLight2.intensity = 2 + Math.cos(time * 2.3) * 0.5
+
+  // 故障灯光 - 常亮 + 随机熄灭（模拟灯光故障）
+  if (cardElement && cardElement.backLight) {
+    if (!glitchState.bursting && time > glitchState.nextTrigger) {
+      glitchState.bursting = true
+      glitchState.burstStart = time
+      glitchState.burstDuration = 0.2 + Math.random() * 3.0   // 随机持续时间
+      glitchState.flickerSpeed = 20 + Math.random() * 50      // 随机闪烁速度
+      glitchState.nextTrigger = time + 6 + Math.random() * 6  // 随机下次触发时间
+    }
+
+    if (glitchState.bursting) {
+      const elapsed = time - glitchState.burstStart
+      if (elapsed < glitchState.burstDuration) {
+        // 熄灭闪烁：信号在 0~1 间跳跃，0=灭 1=亮
+        const sig = Math.sin(elapsed * glitchState.flickerSpeed) * 0.4 +
+                    Math.sin(elapsed * (glitchState.flickerSpeed * 0.53)) * 0.3 +
+                    Math.sin(elapsed * (glitchState.flickerSpeed * 0.17)) * 0.2 +
+                    Math.random() * 0.25
+        const on = sig > 0.3  // 阈值，制造熄灭/复亮的切换感
+        cardElement.backLight.style.opacity = on ? (0.75 * cardBrightness.value) : (0.05 + Math.random() * 0.1)
+        if (cardElement.frontGlow) cardElement.frontGlow.style.opacity = on ? (0.35 * cardBrightness.value) : (0.02 + Math.random() * 0.04)
+      } else {
+        glitchState.bursting = false
+      }
+    } else {
+      // 正常常亮
+      cardElement.backLight.style.opacity = 0.75 * cardBrightness.value
+      if (cardElement.frontGlow) cardElement.frontGlow.style.opacity = 0.35 * cardBrightness.value
+    }
+  }
 
   if (composer) composer.render()
   if (css3dRenderer) css3dRenderer.render(scene, camera)
@@ -408,32 +547,45 @@ function animate() {
       </div>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount" @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" />
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount"
+      :cardBrightness="cardBrightness" :glassBrightness="glassBrightness"
+      :cardColor="cardLightColor" :glassColor="glassLightColor"
+      @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed"
+      @updateCardBrightness="updateCardLight($event, undefined)"
+      @updateGlassBrightness="updateGlassLight($event, undefined)"
+      @updateCardColor="updateCardLight(undefined, $event)"
+      @updateGlassColor="updateGlassLight(undefined, $event)"
+      @resetLights="resetLights" />
 
     <div ref="containerRef" class="canvas-container"></div>
   </div>
 </template>
 
 <style>
+/* 玻璃灯光颜色变量（由 JS 动态更新） */
+:root {
+  --gr: 100; --gg: 220; --gb: 255;
+}
+
 @keyframes orbit {
   from { transform: translate(-50%,-50%) rotateX(70deg) rotateZ(0deg); }
   to   { transform: translate(-50%,-50%) rotateX(70deg) rotateZ(360deg); }
 }
 @keyframes breatheLight {
-  0%, 100% { box-shadow: 0 0 30px rgba(100,220,255,0.4), inset 0 0 20px rgba(100,220,255,0.1); }
-  50%      { box-shadow: 0 0 60px rgba(100,220,255,0.8), inset 0 0 40px rgba(100,220,255,0.25); }
+  0%, 100% { box-shadow: 0 0 30px rgba(var(--gr), var(--gg), var(--gb), 0.4), inset 0 0 20px rgba(var(--gr), var(--gg), var(--gb), 0.1); }
+  50%      { box-shadow: 0 0 60px rgba(var(--gr), var(--gg), var(--gb), 0.8), inset 0 0 40px rgba(var(--gr), var(--gg), var(--gb), 0.25); }
 }
 @keyframes ringPulse {
   0%, 100% { opacity: 0.7; transform: rotateX(90deg) translateZ(-202px) scale(1); }
-  50%      { opacity: 1;   transform: rotateX(90deg) translateZ(-202px) scale(1.06); box-shadow: 0 0 30px rgba(100,220,255,1), 0 0 80px rgba(100,220,255,0.7), 0 0 140px rgba(100,220,255,0.4), inset 0 0 20px rgba(100,220,255,0.6), inset 0 0 60px rgba(100,220,255,0.3); }
+  50%      { opacity: 1;   transform: rotateX(90deg) translateZ(-202px) scale(1.06); box-shadow: 0 0 30px rgba(var(--gr), var(--gg), var(--gb), 1), 0 0 80px rgba(var(--gr), var(--gg), var(--gb), 0.7), 0 0 140px rgba(var(--gr), var(--gg), var(--gb), 0.4), inset 0 0 20px rgba(var(--gr), var(--gg), var(--gb), 0.6), inset 0 0 60px rgba(var(--gr), var(--gg), var(--gb), 0.3); }
 }
 @keyframes cubeFloat {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-15px); }
 }
 @keyframes cubeGlow {
-  0%, 100% { border-color: rgba(100,220,255,0.2); box-shadow: inset 0 0 10px rgba(100,220,255,0.05); }
-  50%      { border-color: rgba(100,220,255,0.6); box-shadow: inset 0 0 30px rgba(100,220,255,0.25), 0 0 20px rgba(100,220,255,0.15); }
+  0%, 100% { border-color: rgba(var(--gr), var(--gg), var(--gb), 0.2); box-shadow: inset 0 0 10px rgba(var(--gr), var(--gg), var(--gb), 0.05); }
+  50%      { border-color: rgba(var(--gr), var(--gg), var(--gb), 0.6); box-shadow: inset 0 0 30px rgba(var(--gr), var(--gg), var(--gb), 0.25), 0 0 20px rgba(var(--gr), var(--gg), var(--gb), 0.15); }
 }
 </style>
 

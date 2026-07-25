@@ -16,7 +16,7 @@
 | 🧊 **Marching Cubes** | 等值面提取算法 | 真实 Mesh，5 种场函数 |
 | 🌀 **Parametric Geometry** | 参数化曲面 f(u,v)→(x,y,z) | 精确数学控制，适合艺术曲面 |
 | 🌿 **L-System / 分形** | 字符串重写规则生成递归结构 | 12 种预设，生长动画 |
-| 🧪 **CSS3D 渲染** | CSS3DRenderer 将 HTML 渲染到 3D 空间 | 4 种布局，TWEEN 动画 |
+| 🧪 **CSS3D 渲染** | CSS3DRenderer 将 HTML 渲染到 3D 空间 | 元素周期表 + 产品展示，Bloom 后处理，玻璃展柜 |
 
 ---
 
@@ -78,11 +78,16 @@
 - **双符号绘制**：`F` 绘制树干/枝条，`G` 绘制树叶（不同长度、不同颜色）
 - **视图自动居中** — 根据模型包围盒调整相机位置
 
-### 🧪 路径 5：CSS3D 渲染 · 元素周期表
+### 🧪 路径 5：CSS3D 渲染
+
+提供两种展示模型，通过路由 `/css3d` 进入后可切换：
+
+#### 📋 元素周期表（PeriodicTable）
 
 - **CSS3DRenderer** — Three.js 的 CSS3D 渲染器，将 HTML 元素渲染到 3D 空间
 - **CSS3DObject** — 将 DOM 元素包裹为 3D 物体，支持位置/旋转/缩放
 - **TrackballControls** — 自由轨道控制相机
+- **118 种化学元素**，完整数据（符号、中英文名、原子量、分类、电子排布、熔点、沸点、发现年份、描述）
 - **四种布局动画**：
   - 📋 **TABLE** — 二维元素周期表布局
   - 🌐 **SPHERE** — 斐波那契球面分布
@@ -90,21 +95,53 @@
   - 📦 **GRID** — 三维网格分布
 - **TWEEN 平滑过渡** — Exponential.InOut 缓动，每次布局切换随机时长 2~4s
 - **自动旋转动画** — 支持播放/暂停 + 速度控制（Space 快捷键）
-- **模型列表** — 可扩展架构，当前模型：🧪 元素周期表（118 种化学元素）
 - **元素搜索系统**：
   - 支持符号（Fe）、中文名（铁）、英文名（Iron）模糊搜索
   - 搜索结果实时预览，↑↓ 键盘选择，Enter 定位
   - ESC 清除搜索并重置视角
-- **3D 坐标投影点击检测** — 通过 `Vector3.project(camera)` 将元素世界坐标投影到屏幕 NDC 空间，绕过 CSS3DRenderer 的 pointer-events 限制，精确检测卡片点击
+- **3D 坐标投影点击检测** — 通过 `Vector3.project(camera)` 投影到 NDC 空间，绕过 CSS3DRenderer 的 pointer-events 限制
 - **元素详情弹窗**（`ElementDetail`）：
   - Teleport 到 body 层级，避免 CSS3D 渲染遮挡
-  - 玻璃透明风格（`backdrop-filter: blur(20px)`），与控制面板统一透明度
-  - 完整信息：原子序数、符号、中英文名、原子量、分类、电子排布、熔点、沸点、发现年份、描述
-  - 淡入淡出 + 缩放过渡动画
-- **呼吸灯效果** — 选中元素卡片脉冲发光动画（`@keyframes breathe` 1.5s 循环）
-- **信息面板** — 2×2 网格布局展示快捷键/操作说明，模型选择按钮
-- **统一透明度控制** — 所有面板背景透明度由控制面板滑块统一管理（CSS 变量 `--panel-alpha`）
-- **可横向扩展** — 后续 CSS3D 模型只需在 `css3dModels` 对象中追加
+  - 玻璃透明风格（`backdrop-filter: blur(20px)`）
+  - 完整信息展示，淡入淡出 + 缩放过渡
+- **呼吸灯效果** — 选中元素卡片脉冲发光动画
+
+#### 📦 产品展示（ProductShowcase）
+
+- **双渲染器叠加** — WebGL（粒子 + Bloom 后处理）作为背景层，CSS3D（产品卡片 + 玻璃展柜）作为前景层
+- **6 面 CSS3D 产品卡片**：
+  - 3D 盒子结构（front/back/left/right/top/bottom），`transform-style: preserve-3d`
+  - **毛玻璃正面** — `backdrop-filter: blur(10px)` + 半透明渐变，模拟玻璃质感
+  - **侧面玻璃切面** — 极淡白色渐变，呈现玻璃厚度
+  - **故障灯光效果** — 背部整面发光，常亮 + 随机熄灭闪烁，模拟真实灯光故障
+  - 点击卡片 180° 翻转动画（`easeOutCubic` 缓动）
+  - 鼠标跟随倾斜（`rotateX/Y` 基于鼠标位置）
+- **玻璃展柜**（`createGlassCase`）：
+  - 6 面透明玻璃盒，半透明渐变边框
+  - **顶面圆环灯带** — 脉冲呼吸动画，多层 `box-shadow` 辉光
+  - **内圈光晕** — 径向渐变，与灯带同步脉冲
+  - **内部发光立方体** — 6 面独立，`cubeGlow` 动画，悬浮浮动
+  - **磨砂底座** — 呼吸灯效果（`breatheLight` 动画）
+  - 外圈轨道环匀速旋转
+  - 整体上下浮动（`Math.sin(time)`）
+- **WebGL 粒子系统** — 200 个随机散布粒子，缓慢旋转
+- **双点光源** — 蓝紫（`0x64c8ff`）+ 品红（`0xff64c8`）脉冲
+- **UnrealBloomPass** — Bloom 辉光后期处理
+- **点击检测** — 3D 投影 NDC 坐标计算，支持点击卡片或展柜
+- **旋转中心自适应** — 点击后根据可见模型调整 OrbitControls.target
+- **模型独立显隐** — 信息面板中按钮分别控制卡片/展柜可见性
+
+#### 🎨 模型灯光控制（控制面板）
+
+| 控制 | 说明 |
+|------|------|
+| 📦 卡片亮度 | 滑块 0~2x，调节卡片背光/正面透光强度 |
+| 🗄️ 展柜亮度 | 滑块 0~2x，调节展柜所有发光元素亮度 |
+| 📦 卡片颜色 | 颜色选择器，修改卡片灯光颜色 |
+| 🗄️ 展柜颜色 | 颜色选择器，同步修改圆环灯带、内圈光晕、立方体、底座、轨道环颜色 |
+| 🔄 重置灯光 | 恢复默认亮度 1x、颜色 `#64dcff` |
+
+展柜灯光颜色通过 **CSS 自定义属性**（`--gr`/`--gg`/`--gb`）实现，所有 `@keyframes` 动画（`breatheLight`、`ringPulse`、`cubeGlow`）实时跟随颜色变化。
 
 ### 🖥️ 通用控制面板
 
@@ -114,6 +151,7 @@
 |------|------|
 | 📊 **性能监控** | FPS、内存占用、对象数实时显示（固定区域） |
 | 💡 **光源控制** | 各光源独立开关 + 全局强度滑块 (0~2x) |
+| 🎨 **模型灯光** | 卡片/展柜独立亮度 (0~2x) + 颜色选择 + 重置 |
 | 🔄 **动画控制** | 播放/暂停 + 速度滑块 (0~3x) |
 | 🌱 **生长控制** | LSystem 页面：生长播放/暂停 + 速度滑块 + 进度条 |
 | 🎯 **布局切换** | CSS3D 页面：TABLE / SPHERE / HELIX / GRID 四布局（插槽） |
@@ -158,15 +196,18 @@ procedural-modeling-demo/
 │   │   └── elementData.js          # 118 种化学元素完整数据 + 搜索函数
 │   │
 │   ├── views/
-│   │   ├── Home.vue                # 首页 - 四张导航卡片
+│   │   ├── Home.vue                # 首页 - 五张导航卡片
 │   │   ├── SDFRaymarching.vue      # 🔮 路径 1
 │   │   ├── MarchingCubes.vue       # 🧊 路径 2（预设切换、居中视图）
 │   │   ├── ParametricGeometry.vue  # 🌀 路径 3
 │   │   ├── LSystem.vue             # 🌿 路径 4（生长动画、分类分组、多色渲染）
-│   │   └── CSS3DRenderer.vue       # 🧪 路径 5（元素周期表、搜索、详情弹窗）
+│   │   └── CSS3DRenderer/
+│   │       ├── CSS3DRenderer.vue    # 🧪 路径 5 入口，模型切换
+│   │       ├── PeriodicTable.vue    # 📋 元素周期表
+│   │       └── ProductShowcase.vue  # 📦 产品展示（玻璃展柜、粒子、Bloom）
 │   │
 │   └── components/
-│       ├── ControlPanel.vue        # 右下角控制面板（固定性能+滚动控制+生长控制）
+│       ├── ControlPanel.vue        # 右下角控制面板（性能+灯光+动画+生长+透明度）
 │       ├── InfoPanel.vue           # 左上角信息面板（固定标题+滚动内容，#header 插槽）
 │       ├── FeaturePanel.vue        # 底部功能面板（展开/折叠、插槽支持）
 │       └── ElementDetail.vue       # 元素详情弹窗（Teleport、玻璃透明、完整信息）
@@ -239,7 +280,7 @@ mkdir -p src/router src/views src/components src/utils src/shaders
 | `/marching-cubes` | `MarchingCubes.vue` | Marching Cubes |
 | `/parametric` | `ParametricGeometry.vue` | 参数化曲面 |
 | `/lsystem` | `LSystem.vue` | L-System 分形 |
-| `/css3d` | `CSS3DRenderer.vue` | CSS3D 渲染 |
+| `/css3d` | `CSS3DRenderer/CSS3DRenderer.vue` | CSS3D 渲染（周期表 / 产品展示） |
 
 ---
 
