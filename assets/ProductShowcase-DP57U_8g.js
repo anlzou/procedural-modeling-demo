@@ -1,4 +1,4 @@
-import{An as e,B as t,Bn as n,Cr as r,P as i,Pr as a,Rr as o,Tr as s,Un as c,_n as l,_t as u,d,ft as f,g as p,gn as m,gt as h,h as g,hr as _,i as ee,jr as v,mr as y,n as te,nr as b,nt as x,o as ne,pr as re,pt as S,r as C,t as w,tt as T,u as ie,ur as E,vt as ae,wn as D,xr as oe,zn as O}from"./CSS3DRenderer-CQg2YHRj.js";import{n as k,t as A}from"./OrbitControls-CVb_478F.js";var j={name:`CopyShader`,uniforms:{tDiffuse:{value:null},opacity:{value:1}},vertexShader:`
+import{An as e,B as t,Bn as n,Cr as r,P as i,Pr as a,Rr as o,Tr as s,Un as c,_n as l,_t as u,d,ft as f,g as p,gn as m,gt as h,h as g,hr as _,i as ee,jr as v,mr as y,n as te,nr as b,nt as x,o as ne,pr as re,pt as S,r as C,t as w,tt as T,u as ie,ur as E,vt as ae,wn as D,xr as oe,zn as O}from"./CSS3DRenderer-BIxwrQCU.js";import{n as k,t as A}from"./OrbitControls-CKAt5V1L.js";var j={name:`CopyShader`,uniforms:{tDiffuse:{value:null},opacity:{value:1}},vertexShader:`
 
 		varying vec2 vUv;
 
