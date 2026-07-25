@@ -251,29 +251,31 @@ function createGlassCase() {
   const glass = 'linear-gradient(135deg,rgba(255,255,255,0.1),rgba(255,255,255,0.05))'
   const border = '1px solid rgba(255,255,255,0.12)'
 
-  // 正面 - 透明（只有边框）
+  const glassGrad = 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.15))'
+
+  // 正面 - 玻璃渐变
   const front = document.createElement('div')
-  front.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:translateZ(${hd}px);background:transparent;border:${border};border-radius:4px;`
+  front.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:translateZ(${hd}px);background:${glassGrad};border:${border};border-radius:4px;`
   box.appendChild(front)
 
-  // 背面 - 透明
+  // 背面 - 玻璃渐变
   const back = document.createElement('div')
-  back.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:rotateY(180deg) translateZ(${hd}px);background:transparent;border:${border};border-radius:4px;`
+  back.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:rotateY(180deg) translateZ(${hd}px);background:${glassGrad};border:${border};border-radius:4px;backdrop-filter:blur(4px);`
   box.appendChild(back)
 
-  // 左面 - 透明
+  // 左面 - 玻璃渐变
   const left = document.createElement('div')
-  left.style.cssText = `position:absolute;width:${d}px;height:${h}px;transform:rotateY(-90deg) translateZ(${hw}px);background:transparent;border:${border};`
+  left.style.cssText = `position:absolute;width:${d}px;height:${h}px;transform:rotateY(-90deg) translateZ(${hw}px);background:${glassGrad};border:${border};`
   box.appendChild(left)
 
-  // 右面 - 透明
+  // 右面 - 玻璃渐变
   const right = document.createElement('div')
-  right.style.cssText = `position:absolute;width:${d}px;height:${h}px;transform:rotateY(90deg) translateZ(${hw}px);background:transparent;border:${border};`
+  right.style.cssText = `position:absolute;width:${d}px;height:${h}px;transform:rotateY(90deg) translateZ(${hw}px);background:${glassGrad};border:${border};`
   box.appendChild(right)
 
-  // 顶面 - 透明
+  // 顶面 - 玻璃渐变
   const top = document.createElement('div')
-  top.style.cssText = `position:absolute;width:${w}px;height:${d}px;transform:rotateX(90deg) translateZ(${hh - 100}px);background:transparent;border:${border};border-radius:4px;`
+  top.style.cssText = `position:absolute;width:${w}px;height:${d}px;transform:rotateX(90deg) translateZ(${hh - 100}px);background:${glassGrad};border:${border};border-radius:4px;`
   box.appendChild(top)
 
   // 顶面圆环灯带
@@ -334,7 +336,6 @@ function createGlassCase() {
   // 底面 - 磨砂底座 + 呼吸灯
   const bottom = document.createElement('div')
   bottom.style.cssText = `position:absolute;width:${w}px;height:${d}px;transform:rotateX(-90deg) translateZ(${hh+100}px);background:linear-gradient(135deg,#1a1a2e,#2a1a3e);border:1px solid rgba(100,200,255,0.15);border-radius:4px;box-shadow:0 0 30px rgba(100,200,255,0.3),inset 0 0 20px rgba(100,200,255,0.1);animation:breatheLight 2s ease-in-out infinite;display:flex;align-items:center;justify-content:center;`
-  bottom.innerHTML = '<span style="font-size:10px;color:rgba(100,200,255,0.4);text-align:center;line-height:1.4;">手办<br>展示</span>'
   box.appendChild(bottom)
 
   // 光圈（轨道环）
