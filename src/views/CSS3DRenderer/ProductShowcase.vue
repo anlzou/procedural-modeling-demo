@@ -260,7 +260,7 @@ function createGlassCase() {
 
   // 背面 - 玻璃渐变
   const back = document.createElement('div')
-  back.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:rotateY(180deg) translateZ(${hd}px);background:${glassGrad};border:${border};border-radius:4px;backdrop-filter:blur(4px);`
+  back.style.cssText = `position:absolute;width:${w}px;height:${h}px;transform:rotateY(180deg) translateZ(${hd}px);background:${glassGrad};border:${border};border-radius:4px;`
   box.appendChild(back)
 
   // 左面 - 玻璃渐变
