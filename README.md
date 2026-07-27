@@ -347,3 +347,17 @@ npm run dev
 - [Vue 3 官方文档](https://vuejs.org/guide/introduction.html)
 - [Vite 官方文档](https://vitejs.dev/guide/)
 - [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) — JavaScript 平滑动画效果库
+
+## 深入学习
+
+### 📚 技术文档
+
+`doc/` 文件夹中收录了本项目相关的核心技术文档，点击标题即可打开：
+
+| 文档 | 简介 |
+|------|------|
+| [Three.js.md](doc/Three.js.md) | Three.js 项目概述、核心架构、渲染管线及主流 3D 技术对比分析 |
+| [CSS3DRenderer、CSS HUD.md](doc/CSS3DRenderer%E3%80%81CSS%20HUD.md) | CSS3DRenderer 原理、CSS 3D Transforms、CSS HUD 覆盖层技术详解 |
+| [OpenCV、MediaPipe、WebAssembly.md](doc/OpenCV%E3%80%81MediaPipe%E3%80%81WebAssembly.md) | OpenCV 计算机视觉、MediaPipe AI 感知与 WebAssembly 跨平台运行时详解 |
+| [PolygonFileFormat.md](doc/PolygonFileFormat.md) | PLY（Polygon File Format）多边形文件格式结构、编码与解析 |
+| [3DGaussianSplatting.md](doc/3DGaussianSplatting.md) | 3D Gaussian Splatting（高斯泼溅）技术原理、数学推导与实现细节 |
