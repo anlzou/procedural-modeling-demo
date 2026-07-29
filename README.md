@@ -154,7 +154,10 @@
 - **✨ 光照特效** — Fresnel 天空反射、Bloom 泛光、噪声调制的太阳闪烁、波峰泡沫
 - **🖥️ 自适应画质** — 5 级质量档位，GPU 基准测试 + 实时 FPS 监控自动升降档
 - **🌐 中英文切换** — 一键切换界面语言
-- **控制面板** — 左上角 InfoPanel 集成海况/时段/画质/漫游/语言控制 + 右下角性能监控与面板透明度
+- **🐟 Boids 鱼群模拟** — 集成自 [RippleAquarium](https://github.com/SeanWong17/RippleAquarium) 的完整 Boids 鱼群系统（沙丁鱼 + 锦鲤），含空间哈希网格、InstancedMesh 渲染、鱼体曲线变形着色器、鱼眼相机
+- **🎛️ 鱼群控制** — 沙丁鱼/锦鲤独立参数（数量、速度、感知范围、分离强度、避障强度、转向速度、顶部回避）
+- **📐 可调鱼缸** — 虚拟鱼缸大小 20×20 ~ 100×100，边框显隐切换
+- **控制面板** — 左上角 InfoPanel 集成海况/时段/画质/鱼缸/鱼群控制 + 右下角性能监控与面板透明度
 
 ---
 
@@ -320,3 +323,32 @@ pnpm preview
 | [PolygonFileFormat.md](doc/PolygonFileFormat.md) | PLY（Polygon File Format）多边形文件格式结构、编码与解析 |
 | [3DGaussianSplatting.md](doc/3DGaussianSplatting.md) | 3D Gaussian Splatting（高斯泼溅）技术原理、数学推导与实现细节 |
 | [OpenSea.md](doc/OpenSea.md) | Open Sea 实时程序化海洋渲染 — WebGPU · Three.js TSL 技术详解 |
+
+---
+
+## 🙏 致谢与开源声明
+
+本项目参考、改编并集成了以下开源项目和资源：
+
+| 项目 | 说明 |
+|------|------|
+| [RippleAquarium](https://github.com/SeanWong17/RippleAquarium) (AGPL-3.0) | Boids 鱼群模拟（沙丁鱼 + 锦鲤）、InstancedMesh 鱼群渲染、鱼体曲线变形着色器、鱼眼相机系统、鱼模型 (`cartoon.glb`) 均改编自该项目 |
+| [vibe-motion/threejs-boids](https://github.com/vibe-motion/threejs-boids) | RippleAquarium 上游：Boids 算法基础与实例化鱼群渲染起点 |
+
+### 模型资源
+
+| 文件 | 来源 | 许可 |
+|------|------|------|
+| `src/views/OpenSea/fish/cartoon.glb` | RippleAquarium 项目（上游来自 Jaydeep-P/aquarium） | AGPL-3.0 |
+
+### 许可声明
+
+本项目部分代码（鱼群模拟模块：`src/views/OpenSea/fish/`）改编自 [RippleAquarium](https://github.com/SeanWong17/RippleAquarium)，其原始代码采用 **GNU Affero General Public License v3.0 (AGPL-3.0)**。根据 AGPL-3.0 的要求：
+
+1. 如果你部署或分发本项目的完整副本，必须同时提供完整的源代码。
+2. 如果你通过网络（如网站）向用户提供本项目的功能，必须允许用户下载完整的对应源代码。
+3. 上述鱼群模拟模块的修改版本同样受 AGPL-3.0 约束。
+
+除鱼群模拟模块外，本项目其余部分采用 **MIT License**（详见 `LICENSE` 文件，如存在）。
+
+> 以上声明仅适用于从 RippleAquarium 改编的代码。如果你对 AGPL 条款有疑问，或需要以不同条款使用该模块，请联系原作者。

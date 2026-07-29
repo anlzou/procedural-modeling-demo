@@ -8,7 +8,7 @@ const alpha = ref(0.15)
 const playing = ref(true)
 const speed = ref(1)
 
-const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed', 'updateCardBrightness', 'updateGlassBrightness', 'updateCardColor', 'updateGlassColor', 'resetLights'])
+const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed', 'updateCardBrightness', 'updateGlassBrightness', 'updateCardColor', 'updateGlassColor', 'resetLights', 'resetCamera', 'toggleFishCam', 'toggleUltraHd'])
 
 // 光源控制
 const lightVisible = ref([])
@@ -77,6 +77,10 @@ const props = defineProps({
   glassBrightness: { type: Number, default: 1 },
   cardColor: { type: String, default: '#64dcff' },
   glassColor: { type: String, default: '#64dcff' },
+  qualityBadge: { type: String, default: '' },
+  qualityLabel: { type: String, default: '' },
+  fishCamActive: { type: Boolean, default: false },
+  ultraHd: { type: Boolean, default: false },
 })
 
 // Initialize light visibility from prop
@@ -265,6 +269,21 @@ watch(() => props.lightSources, (val) => {
               />
               <span class="slider-label">实心</span>
               <span class="slider-value">{{ Math.round(alpha * 100) }}%</span>
+            </div>
+          </div>
+
+          <!-- 相机控制 -->
+          <div class="section">
+            <div style="display:flex; gap:0.35rem;">
+              <div style="flex:1; display:flex; align-items:center; gap:6px;">
+                <span class="quality-badge" :class="{ uhd: qualityBadge === 'ULTRA HD' || qualityBadge === '超高清' }">{{ qualityBadge || '—' }}</span>
+                <span class="quality-lbl">{{ qualityLabel || '—' }}</span>
+              </div>
+              <button class="reset-btn" :class="{ active: ultraHd }" style="flex:1; margin-top:0;" @click="$emit('toggleUltraHd')">✨ 超高清</button>
+            </div>
+            <div style="margin-top:0.35rem; display:flex; gap:0.35rem;">
+              <button class="reset-btn" style="flex:1; margin-top:0;" @click="$emit('resetCamera')">📷 重置相机</button>
+              <button class="reset-btn" :class="{ active: fishCamActive }" style="flex:1; margin-top:0;" @click="$emit('toggleFishCam')">🐟 鱼眼相机</button>
             </div>
           </div>
         </div>
@@ -475,6 +494,44 @@ watch(() => props.lightSources, (val) => {
   color: #22d3ee;
   border-color: rgba(34,211,238,0.4);
   background: rgba(34,211,238,0.08);
+}
+
+.reset-btn.active {
+  color: #d9f7f4;
+  border-color: rgba(143,233,228,0.55);
+  background: rgba(143,233,228,0.14);
+}
+
+.reset-btn.active:hover {
+  color: #effffd;
+  background: rgba(143,233,228,0.2);
+}
+
+.quality-badge {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(143, 233, 228, 0.12);
+  border: 1px solid rgba(143, 233, 228, 0.3);
+  color: #8fe9e4;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.quality-badge.uhd {
+  background: rgba(255, 200, 100, 0.12);
+  border-color: rgba(255, 200, 100, 0.4);
+  color: #ffd866;
+}
+
+.quality-lbl {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .section {

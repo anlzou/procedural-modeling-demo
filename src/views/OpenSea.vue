@@ -12,6 +12,7 @@ import {
 import InfoPanel from '../components/InfoPanel.vue'
 import { t as i18nT } from '../utils/oceanI18n.js'
 import { createPerfEngine } from '../utils/oceanPerf.js'
+import { createFishSystem } from './OpenSea/fish/index.js'
 const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
@@ -25,6 +26,23 @@ const timeLabel = ref('午后')
 const seaValue = ref('0.93')
 const currentLang = ref('zh')
 const driftEnabled = ref(true)
+
+// Fish system state
+const fishSystem = ref(null)
+const fishCamActive = ref(false)
+const simPaused = ref(false)
+const simSpeed = ref(1)
+const aquariumSize = ref(20)
+const showBoundary = ref(false)
+
+// Fish slider display values (reactive mirrors for template binding)
+const fishDisplay = ref({
+  sardineCount: 0, koiCount: 0, perception: 2.7,
+  sardineSpeed: 1.0, separation: 1.35, avoidance: 10,
+  turnRate: 4, topMargin: 0.42,
+  koiPerception: 2.7, koiSpeed: 1.0, koiSeparation: 1.35,
+  koiAvoidance: 10, koiTurnRate: 4, koiTopMargin: 0.42,
+})
 
 function t(key) {
   return i18nT(currentLang.value, key)
@@ -251,6 +269,9 @@ let lastNow = 0
 let revealed = false
 let fpsAccum = 0
 let fpsCount = 0
+let onSpaceKey = null
+/** Snapshot of the camera state when the page first loads */
+const initialCamState = { pos: new THREE.Vector3(), target: new THREE.Vector3() }
 
 /* ---------------------------------------------------------------------------
    Time of day
@@ -329,6 +350,67 @@ function toggleLang() {
 }
 
 /* ---------------------------------------------------------------------------
+   Camera reset
+   --------------------------------------------------------------------------- */
+function onResetCamera() {
+  camera.position.copy(initialCamState.pos)
+  controls.target.copy(initialCamState.target)
+  controls.update()
+  if (fishSystem.value?.cameraRig.active) {
+    fishSystem.value.cameraRig.exit()
+  }
+}
+
+function onToggleFishCam() {
+  if (!fishSystem.value?.ready) return
+  if (fishSystem.value.cameraRig.active) {
+    fishSystem.value.cameraRig.exit()
+    onResetCamera()
+  } else {
+    const fish = fishSystem.value.getRandomFish()
+    fishSystem.value.cameraRig.enter(fish)
+  }
+}
+
+function onTogglePlay(playing) {
+  simPaused.value = !playing
+}
+
+function onUpdateSpeed(val) {
+  simSpeed.value = val
+}
+
+function onAquariumSizeChange(e) {
+  const val = Number(e.target.value)
+  aquariumSize.value = val
+  if (fishSystem.value) fishSystem.value.resizeAquarium(val)
+}
+
+function toggleBoundary() {
+  showBoundary.value = !showBoundary.value
+  if (fishSystem.value) fishSystem.value.toggleBoundary(showBoundary.value)
+}
+
+/* ---------------------------------------------------------------------------
+   Fish controls handlers
+   --------------------------------------------------------------------------- */
+function onFishControl(key, e) {
+  const val = Number(e.target.value)
+  if (!fishSystem.value) return
+  fishDisplay.value[key] = val
+  const ctrl = fishSystem.value.controls
+  switch (key) {
+    case 'sardineCount': fishSystem.value.onSardineCountChange(val); break
+    case 'koiCount': fishSystem.value.onKoiCountChange(val); break
+    default:
+      if (key in ctrl) {
+        ctrl[key].value = val
+        fishSystem.value.onControlChange()
+      }
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Animation
    --------------------------------------------------------------------------- */
 function revealUI() {
@@ -340,7 +422,32 @@ async function frame() {
   const rawDt = (now - lastNow) / 1000
   lastNow = now
   const dt = Math.min(rawDt, 0.1)
-  uTime.value += dt
+
+  // Advance ocean and fish simulation (paused when simPaused)
+  if (!simPaused.value) {
+    uTime.value += dt * simSpeed.value
+
+    // Update fish simulation and switch camera if needed
+    if (fishSystem.value?.ready) {
+      fishSystem.value.update(dt)
+      // Sync fish directional light with procedural sun
+      fishSystem.value.updateLights(uSunDir.value, uSunColor.value)
+      fishCamActive.value = fishSystem.value.cameraRig.active
+      if (fishCamActive.value) {
+        controls.enabled = false
+        // Copy fish camera state to the main camera for post-processing
+        const fishCam = fishSystem.value.cameraRig.activeCamera
+        camera.position.copy(fishCam.position)
+        camera.quaternion.copy(fishCam.quaternion)
+        camera.up.copy(fishCam.up)
+        camera.aspect = containerRef.value.clientWidth / containerRef.value.clientHeight
+        camera.updateProjectionMatrix()
+      } else {
+        controls.enabled = true
+      }
+    }
+  }
+
   PERF.tick(dt)
   controls.update()
   await postProcessing.renderAsync()
@@ -403,6 +510,22 @@ async function init() {
     controls.autoRotateSpeed = 0.25
     controls.update()
 
+    // Save initial camera state for reset
+    initialCamState.pos.copy(camera.position)
+    initialCamState.target.copy(controls.target)
+
+    // Initialize fish system
+    fishSystem.value = createFishSystem({ scene, controls, aquariumSize: 20, showBoundary: false })
+    fishCamActive.value = false
+
+    // Space key → toggle fish cam
+    onSpaceKey = (e) => {
+      if (e.code !== 'Space' || e.repeat) return
+      e.preventDefault()
+      onToggleFishCam()
+    }
+    window.addEventListener('keydown', onSpaceKey)
+
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
@@ -424,6 +547,7 @@ function onResize() {
   camera.updateProjectionMatrix()
   PERF.applyPixelRatio(PERF.cfg)
   renderer.setSize(w, h)
+  if (fishSystem.value) fishSystem.value.resize(w, h)
 }
 
 function onVisibilityChange() {
@@ -446,10 +570,11 @@ onBeforeUnmount(() => {
   if (renderer) {
     renderer.setAnimationLoop(null)
   }
+  fishSystem.value?.dispose()
+  if (onSpaceKey) window.removeEventListener('keydown', onSpaceKey)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   controls?.dispose()
-  controls?.domElement?.remove()
   if (window.__ocean) {
     window.__ocean.geometry.dispose()
     scene?.remove(window.__ocean)
@@ -474,7 +599,11 @@ onBeforeUnmount(() => {
     <InfoPanel>
       <template #header>
         <div class="eyebrow">{{ t('panel.eyebrow') }}</div>
-        <h1 class="title">OPEN SEA</h1>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <h1 class="title" style="margin:0;">OPEN SEA</h1>
+          <button class="pill lang-pill" type="button" :aria-label="'Switch language'"
+            @click="toggleLang">{{ currentLang === 'en' ? '中' : 'EN' }}</button>
+        </div>
         <p class="subtitle">{{ t('panel.subtitle') }}</p>
       </template>
 
@@ -498,29 +627,175 @@ onBeforeUnmount(() => {
           @input="onTimeOfDayChange" :aria-label="t('panel.timeOfDay')" />
       </div>
 
-      <!-- Quality bar -->
-      <div class="quality-bar">
-        <span class="badge" :class="{ uhd: PERF.ultraHd }">{{ qualityBadge }}</span>
-        <span class="badge-label">{{ qualityLabel }}</span>
-        <button class="pill pill-uhd" type="button" :class="{ active: PERF.ultraHd }"
-          :aria-pressed="PERF.ultraHd" @click="toggleUltraHd">{{ t('panel.uhd') }}</button>
+      <!-- Aquarium Size -->
+      <div class="control">
+        <div class="control-head">
+          <label for="aquarium-size">{{ t('panel.aquariumSize') }}</label>
+          <span class="control-value">{{ aquariumSize }} × {{ aquariumSize }}</span>
+        </div>
+        <input id="aquarium-size" type="range" min="20" max="100" :value="aquariumSize" step="1"
+          @input="onAquariumSizeChange" />
       </div>
 
-      <!-- Panel footer -->
-      <div class="panel-footer">
-        <button class="pill" :class="{ active: driftEnabled }" type="button" :aria-pressed="driftEnabled"
-          @click="toggleDrift">{{ t('panel.drift') }}</button>
-        <button class="pill lang-pill" type="button" :aria-label="'Switch language'"
-          @click="toggleLang">{{ currentLang === 'en' ? '中' : 'EN' }}</button>
-        <div class="fps"><span>{{ fpsDisplay }}</span> FPS</div>
+      <!-- Show Boundary -->
+      <div class="control">
+        <div class="control-head">
+          <label for="show-boundary">{{ t('panel.showBoundary') }}</label>
+          <button class="pill" style="padding:4px 14px;font-size:10px;"
+            :class="{ active: showBoundary }" @click="toggleBoundary">{{ showBoundary ? 'ON' : 'OFF' }}</button>
+        </div>
+      </div>
+
+      <!-- Fish School Controls -->
+      <div class="control">
+        <div class="control-head" style="margin-top:12px;">
+          <span style="color:#8fe9e4;letter-spacing:0.1em;">{{ t('fish.title') }}</span>
+        </div>
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="sardine-count" data-i18n="fish.sardineCount">{{ t('fish.sardineCount') }}</label>
+          <span class="control-value">{{ fishDisplay.sardineCount }}</span>
+        </div>
+        <input id="sardine-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.sardineCount"
+          @input="onFishControl('sardineCount', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-count" data-i18n="fish.koiCount">{{ t('fish.koiCount') }}</label>
+          <span class="control-value">{{ fishDisplay.koiCount }}</span>
+        </div>
+        <input id="koi-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.koiCount"
+          @input="onFishControl('koiCount', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="fish-perception" data-i18n="fish.perception">{{ t('fish.perception') }}</label>
+          <span class="control-value">{{ fishDisplay.perception }}</span>
+        </div>
+        <input id="fish-perception" type="range" :min="1.2" :max="5.2" step="0.1"
+          :value="fishDisplay.perception" @input="onFishControl('perception', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="sardine-speed" data-i18n="fish.sardineSpeed">{{ t('fish.sardineSpeed') }}</label>
+          <span class="control-value">{{ fishDisplay.sardineSpeed }}</span>
+        </div>
+        <input id="sardine-speed" type="range" :min="0.2" :max="2.0" step="0.05"
+          :value="fishDisplay.sardineSpeed" @input="onFishControl('sardineSpeed', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="fish-separation" data-i18n="fish.separation">{{ t('fish.separation') }}</label>
+          <span class="control-value">{{ fishDisplay.separation }}</span>
+        </div>
+        <input id="fish-separation" type="range" :min="0.4" :max="3.0" step="0.1"
+          :value="fishDisplay.separation" @input="onFishControl('separation', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="fish-avoidance" data-i18n="fish.avoidance">{{ t('fish.avoidance') }}</label>
+          <span class="control-value">{{ fishDisplay.avoidance }}</span>
+        </div>
+        <input id="fish-avoidance" type="range" :min="0" :max="20" step="0.5"
+          :value="fishDisplay.avoidance" @input="onFishControl('avoidance', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="fish-turn-rate" data-i18n="fish.turnRate">{{ t('fish.turnRate') }}</label>
+          <span class="control-value">{{ fishDisplay.turnRate }}</span>
+        </div>
+        <input id="fish-turn-rate" type="range" :min="0.5" :max="8" step="0.1"
+          :value="fishDisplay.turnRate" @input="onFishControl('turnRate', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="fish-top-margin" data-i18n="fish.topMargin">{{ t('fish.topMargin') }}</label>
+          <span class="control-value">{{ fishDisplay.topMargin }}</span>
+        </div>
+        <input id="fish-top-margin" type="range" :min="0" :max="2" step="0.05"
+          :value="fishDisplay.topMargin" @input="onFishControl('topMargin', $event)" />
+      </div>
+
+      <!-- Koi Controls -->
+      <div class="control">
+        <div class="control-head" style="margin-top:6px;">
+          <span style="color:#ff8c2a;letter-spacing:0.1em;">{{ t('fish.koiGroup') }}</span>
+        </div>
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-perception" data-i18n="fish.koiPerception">{{ t('fish.koiPerception') }}</label>
+          <span class="control-value">{{ fishDisplay.koiPerception }}</span>
+        </div>
+        <input id="koi-perception" type="range" :min="1.2" :max="5.2" step="0.1"
+          :value="fishDisplay.koiPerception" @input="onFishControl('koiPerception', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-speed" data-i18n="fish.koiSpeed">{{ t('fish.koiSpeed') }}</label>
+          <span class="control-value">{{ fishDisplay.koiSpeed }}</span>
+        </div>
+        <input id="koi-speed" type="range" :min="0.2" :max="2.0" step="0.05"
+          :value="fishDisplay.koiSpeed" @input="onFishControl('koiSpeed', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-separation" data-i18n="fish.koiSeparation">{{ t('fish.koiSeparation') }}</label>
+          <span class="control-value">{{ fishDisplay.koiSeparation }}</span>
+        </div>
+        <input id="koi-separation" type="range" :min="0.4" :max="3.0" step="0.1"
+          :value="fishDisplay.koiSeparation" @input="onFishControl('koiSeparation', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-avoidance" data-i18n="fish.koiAvoidance">{{ t('fish.koiAvoidance') }}</label>
+          <span class="control-value">{{ fishDisplay.koiAvoidance }}</span>
+        </div>
+        <input id="koi-avoidance" type="range" :min="0" :max="20" step="0.5"
+          :value="fishDisplay.koiAvoidance" @input="onFishControl('koiAvoidance', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-turn-rate" data-i18n="fish.koiTurnRate">{{ t('fish.koiTurnRate') }}</label>
+          <span class="control-value">{{ fishDisplay.koiTurnRate }}</span>
+        </div>
+        <input id="koi-turn-rate" type="range" :min="0.5" :max="8" step="0.1"
+          :value="fishDisplay.koiTurnRate" @input="onFishControl('koiTurnRate', $event)" />
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="koi-top-margin" data-i18n="fish.koiTopMargin">{{ t('fish.koiTopMargin') }}</label>
+          <span class="control-value">{{ fishDisplay.koiTopMargin }}</span>
+        </div>
+        <input id="koi-top-margin" type="range" :min="0" :max="2" step="0.05"
+          :value="fishDisplay.koiTopMargin" @input="onFishControl('koiTopMargin', $event)" />
       </div>
 
       <!-- Hint -->
-      <div class="hint-content" aria-hidden="true">{{ t('panel.hint') }}</div>
+      <div class="hint-content" aria-hidden="true">{{ t('panel.hint') }} · {{ t('fish.cameraToggle') }}</div>
     </InfoPanel>
 
     <!-- ControlPanel with transparency slider -->
-    <ControlPanel :fps="Number(fpsDisplay)" :showAnimation="false" />
+    <ControlPanel :fps="Number(fpsDisplay)" :showAnimation="true"
+      :qualityBadge="qualityBadge" :qualityLabel="qualityLabel"
+      :fishCamActive="fishCamActive" :ultraHd="PERF?.ultraHd ?? false"
+      @resetCamera="onResetCamera" @toggleFishCam="onToggleFishCam"
+      @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @toggleUltraHd="toggleUltraHd" />
   </div>
 </template>
 
@@ -725,15 +1000,6 @@ onBeforeUnmount(() => {
 
 .pill-uhd.active:hover {
   color: #effffd;
-}
-
-.panel-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .pill {
