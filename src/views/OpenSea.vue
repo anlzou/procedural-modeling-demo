@@ -10,6 +10,8 @@ import {
   positionLocal, positionWorld, cameraPosition
 } from 'three/tsl'
 import InfoPanel from '../components/InfoPanel.vue'
+import { t as i18nT } from '../utils/oceanI18n.js'
+import { createPerfEngine } from '../utils/oceanPerf.js'
 const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
@@ -22,277 +24,39 @@ const qualityBadge = ref('自适应')
 const timeLabel = ref('午后')
 const seaValue = ref('0.93')
 const currentLang = ref('zh')
-
-/* ---------------------------------------------------------------------------
-   i18n — English / Chinese localization
-   --------------------------------------------------------------------------- */
-const L10N = {
-  en: {
-    'panel.eyebrow': 'Realtime Ocean',
-    'panel.subtitle': 'Gerstner swell · FBM micro-surface · spectral sky',
-    'panel.seaState': 'Sea State',
-    'panel.timeOfDay': 'Time of Day',
-    'panel.drift': 'Drift',
-    'panel.uhd': 'Ultra HD',
-    'panel.hint': 'DRAG TO ORBIT — SCROLL TO ZOOM',
-    'time.dusk': 'DUSK',
-    'time.golden': 'GOLDEN HOUR',
-    'time.afternoon': 'AFTERNOON',
-    'time.midday': 'MIDDAY',
-    'quality.adaptive': 'ADAPTIVE',
-    'quality.ultraHd': 'ULTRA HD',
-    'quality.bench': 'BENCH',
-    'quality.max': 'MAX',
-    'tier.0': 'Ultra',
-    'tier.1': 'High',
-    'tier.2': 'Medium',
-    'tier.3': 'Low',
-    'tier.4': 'Potato',
-  },
-  zh: {
-    'panel.eyebrow': '实时海洋',
-    'panel.subtitle': '格斯特纳涌浪 · FBM微表面 · 光谱天空',
-    'panel.seaState': '海况',
-    'panel.timeOfDay': '时段',
-    'panel.drift': '漫游',
-    'panel.uhd': '超高清',
-    'panel.hint': '拖拽旋转 — 滚轮缩放',
-    'time.dusk': '黄昏',
-    'time.golden': '黄金时段',
-    'time.afternoon': '午后',
-    'time.midday': '正午',
-    'quality.adaptive': '自适应',
-    'quality.ultraHd': '超高清',
-    'quality.bench': '测试',
-    'quality.max': '最高',
-    'tier.0': '极致',
-    'tier.1': '高',
-    'tier.2': '中',
-    'tier.3': '低',
-    'tier.4': '基础',
-  }
-}
+const driftEnabled = ref(true)
 
 function t(key) {
-  return (L10N[currentLang.value] && L10N[currentLang.value][key]) || (L10N.en[key]) || key
+  return i18nT(currentLang.value, key)
 }
 
 /* ---------------------------------------------------------------------------
-   Quality Manager — adaptive performance scaling
+   Quality Manager — adaptive performance scaling (extracted)
+   Initialized after TSL shader functions are defined (see below).
    --------------------------------------------------------------------------- */
-const PERF = {
-  TARGET_FPS: 55,
-  UPSCALE_FPS: 58,
-  DOWNSCALE_FPS: 35,
-  BENCHMARK_FRAMES: 20,
-  STABLE_WINDOW: 2.5,
-  RECORD_WINDOW: 0.8,
+let PERF
 
-  tiers: [
-    { pr: 2.0, ms: 440, sw: 48, sh: 24, bi: 1.0, fbm: 3, glitter: true, foam: true },
-    { pr: 1.5, ms: 340, sw: 36, sh: 18, bi: 0.7, fbm: 3, glitter: true, foam: true },
-    { pr: 1.2, ms: 260, sw: 28, sh: 14, bi: 0.4, fbm: 2, glitter: true, foam: false },
-    { pr: 1.0, ms: 200, sw: 24, sh: 12, bi: 0.0, fbm: 2, glitter: false, foam: false },
-    { pr: 0.75, ms: 140, sw: 16, sh: 8, bi: 0.0, fbm: 1, glitter: false, foam: false },
-  ],
-
-  tier: 2,
-  prevTier: 2,
-  benchTier: 2,
-  locked: false,
-  lockTimer: 0,
-  ultraHd: false,
-  savedTier: 2,
-  stableTime: 0,
-  timer: 0,
-  frames: 0,
-  benchPhase: true,
-  benchFrames: 0,
-  benchAccum: 0,
-  adapt: true,
-
-  get cfg() { return PERF.tiers[PERF.tier] || PERF.tiers[2] },
-
-  async pickInitialTier() {
-    const dpr = window.devicePixelRatio || 1
-    const screenArea = window.innerWidth * window.innerHeight
-    let gpuPower = dpr * 4
-    try {
-      const adapter = await navigator.gpu.requestAdapter()
-      if (adapter) {
-        const info = adapter.info || {}
-        const vendor = (info.vendor || '').toLowerCase()
-        const arch = (info.architecture || '').toLowerCase()
-        const isLowEnd = /intel|mesa|llvmpipe|swiftshader|mali(?!(g7|g8))/.test(vendor + arch)
-        const isHighEnd = /nvidia|amd|radeon|apple(?=.*(?:m[2-4]|a17|ultra))/i.test(vendor + arch)
-        if (isLowEnd) gpuPower *= 0.4
-        if (isHighEnd) gpuPower *= 2.2
-        if (screenArea > 3_600_000) gpuPower *= 0.7
-      }
-    } catch { /* ignore */ }
-    if (gpuPower >= 6) return 0
-    if (gpuPower >= 3) return 1
-    if (gpuPower >= 2) return 2
-    if (gpuPower >= 1) return 3
-    return 4
-  },
-
-  rebuildScene() {
-    const cfg = PERF.cfg
-    uFbmOctaves.value = cfg.fbm
-    if (PERF.prevTier !== PERF.tier || !PERF.benchPhase) {
-      PERF.rebuildOceanMesh(cfg)
-      PERF.rebuildSkyDome(cfg)
-      PERF.rebuildPostProcessing(cfg)
-      PERF.applyPixelRatio(cfg)
-    }
-    PERF.prevTier = PERF.tier
-  },
-
-  rebuildOceanMesh(cfg) {
-    if (window.__ocean) {
-      window.__ocean.geometry.dispose()
-      scene.remove(window.__ocean)
-    }
-    const segs = cfg.ms
-    const geo = new THREE.PlaneGeometry(420, 420, segs, segs)
-    geo.rotateX(-Math.PI / 2)
-    const mat = new THREE.MeshBasicNodeMaterial()
-    mat.positionNode = wavePosition(positionLocal.xz, uTime, uSeaUniform)
-    mat.colorNode = oceanColor()
-    const mesh = new THREE.Mesh(geo, mat)
-    mesh.frustumCulled = false
-    scene.add(mesh)
-    window.__ocean = mesh
-  },
-
-  rebuildSkyDome(cfg) {
-    if (window.__sky) {
-      window.__sky.geometry.dispose()
-      scene.remove(window.__sky)
-    }
-    const segW = Math.max(cfg.sw, 8)
-    const segH = Math.max(cfg.sh, 4)
-    const geo = new THREE.SphereGeometry(4000, segW, segH)
-    const mat = new THREE.MeshBasicNodeMaterial()
-    mat.side = THREE.BackSide
-    mat.depthWrite = false
-    mat.colorNode = skyDomeColor()
-    const mesh = new THREE.Mesh(geo, mat)
-    mesh.renderOrder = -1
-    mesh.frustumCulled = false
-    scene.add(mesh)
-    window.__sky = mesh
-  },
-
-  rebuildPostProcessing(cfg) {
-    if (!postProcessing) return
-    const scenePass = pass(scene, camera)
-    const sceneColor = scenePass.getTextureNode('output')
-    if (cfg.bi > 0.001) {
-      postProcessing.outputNode = sceneColor.add(bloom(sceneColor, 0.4 * cfg.bi, 0.3 * cfg.bi, 0.9))
-    } else {
-      postProcessing.outputNode = sceneColor
-    }
-  },
-
-  applyPixelRatio(cfg) {
-    const pr = Math.min(window.devicePixelRatio, cfg.pr)
-    renderer.setPixelRatio(pr)
-  },
-
-  tick(dt) {
-    if (!PERF.adapt) return
-    PERF.timer += dt
-    PERF.frames += 1
-    if (PERF.benchPhase) {
-      PERF.benchAccum += dt
-      PERF.benchFrames += 1
-      if (PERF.benchFrames >= PERF.BENCHMARK_FRAMES) {
-        PERF.finishBenchmark()
-      }
-      return
-    }
-    if (PERF.timer >= PERF.RECORD_WINDOW) {
-      const fps = PERF.frames / PERF.timer
-      PERF.frames = 0
-      PERF.timer = 0
-      if (PERF.locked) {
-        PERF.lockTimer -= PERF.RECORD_WINDOW
-        if (PERF.lockTimer <= 0) PERF.locked = false
-        return
-      }
-      if (fps < PERF.DOWNSCALE_FPS && PERF.tier < 4) {
-        PERF.tier = Math.min(PERF.tier + 1, 4)
-        PERF.locked = true
-        PERF.lockTimer = 2.0
-        PERF.stableTime = 0
-        PERF.rebuildScene()
-        updateQualityBadge()
-      } else if (fps >= PERF.UPSCALE_FPS && PERF.tier > 0) {
-        PERF.stableTime += PERF.RECORD_WINDOW
-        if (PERF.stableTime >= PERF.STABLE_WINDOW) {
-          PERF.tier = Math.max(PERF.tier - 1, 0)
-          PERF.locked = true
-          PERF.lockTimer = 2.5
-          PERF.stableTime = 0
-          PERF.rebuildScene()
-          updateQualityBadge()
-        }
-      } else {
-        PERF.stableTime = Math.max(0, PERF.stableTime - PERF.RECORD_WINDOW * 0.3)
-      }
-    }
-  },
-
-  async finishBenchmark() {
-    const fps = PERF.benchFrames / PERF.benchAccum
-    if (fps < PERF.DOWNSCALE_FPS && PERF.tier < 4) {
-      PERF.tier += 1
-      PERF.benchFrames = 0
-      PERF.benchAccum = 0
-      PERF.rebuildScene()
-      return
-    }
-    PERF.benchPhase = false
-    PERF.timer = 0
-    PERF.frames = 0
-    fpsDisplay.value = String(Math.round(fps))
-    updateQualityBadge()
-  },
-
-  toggleUltraHd() {
-    PERF.ultraHd = !PERF.ultraHd
-    if (PERF.ultraHd) {
-      PERF.savedTier = PERF.tier
-      PERF.adapt = false
-      PERF.benchPhase = false
-      PERF.tier = 0
-    } else {
-      PERF.tier = PERF.savedTier
-      PERF.adapt = true
-      PERF.stableTime = 0
-      PERF.timer = 0
-      PERF.frames = 0
-    }
-    PERF.locked = true
-    PERF.lockTimer = 2.0
-    PERF.rebuildScene()
-    updateQualityBadge()
-  }
-}
-
-function updateQualityBadge() {
-  if (PERF.ultraHd) {
-    qualityBadge.value = t('quality.ultraHd')
-    qualityLabel.value = t('quality.max')
-  } else if (PERF.benchPhase) {
-    qualityBadge.value = t('quality.bench')
-    qualityLabel.value = '…'
-  } else {
-    qualityBadge.value = t('quality.adaptive')
-    qualityLabel.value = t('tier.' + PERF.tier) || '—'
-  }
+function initPerfEngine() {
+  PERF = createPerfEngine({
+    THREE,
+    sceneRef: () => scene,
+    rendererRef: () => renderer,
+    cameraRef: () => camera,
+    postProcessingRef: () => postProcessing,
+    wavePosition,
+    oceanColor,
+    skyDomeColor,
+    positionLocal,
+    pass,
+    bloom,
+    uTime,
+    uSeaUniform,
+    uFbmOctaves,
+    fpsDisplay,
+    qualityBadge,
+    qualityLabel,
+    t,
+  })
 }
 
 /* ---------------------------------------------------------------------------
@@ -476,6 +240,9 @@ const oceanColor = Fn(() => {
   return vec4(col, 1.0)
 })
 
+// Initialize PERF engine after all TSL functions are defined
+initPerfEngine()
+
 /* ---------------------------------------------------------------------------
    Scene variables
    --------------------------------------------------------------------------- */
@@ -545,8 +312,9 @@ function onTimeOfDayChange(e) {
 }
 
 function toggleDrift() {
+  driftEnabled.value = !driftEnabled.value
   if (controls) {
-    controls.autoRotate = !controls.autoRotate
+    controls.autoRotate = driftEnabled.value
   }
 }
 
@@ -556,7 +324,7 @@ function toggleUltraHd() {
 
 function toggleLang() {
   currentLang.value = currentLang.value === 'en' ? 'zh' : 'en'
-  updateQualityBadge()
+  PERF.updateQualityBadge()
   applyTimeOfDay(Number(document.getElementById('time-range')?.value || 55) / 100)
 }
 
@@ -586,7 +354,7 @@ async function frame() {
     fpsCount = 0
   }
   if (!revealed) revealUI()
-  updateQualityBadge()
+  PERF.updateQualityBadge()
 }
 
 /* ---------------------------------------------------------------------------
@@ -601,6 +369,7 @@ async function init() {
     PERF.tier = await PERF.pickInitialTier()
     PERF.prevTier = PERF.tier
     PERF.benchTier = PERF.tier
+    PERF.initPixelRatio()
     uFbmOctaves.value = PERF.cfg.fbm
 
     renderer = new THREE.WebGPURenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -739,7 +508,7 @@ onBeforeUnmount(() => {
 
       <!-- Panel footer -->
       <div class="panel-footer">
-        <button class="pill active" type="button" :aria-pressed="true"
+        <button class="pill" :class="{ active: driftEnabled }" type="button" :aria-pressed="driftEnabled"
           @click="toggleDrift">{{ t('panel.drift') }}</button>
         <button class="pill lang-pill" type="button" :aria-label="'Switch language'"
           @click="toggleLang">{{ currentLang === 'en' ? '中' : 'EN' }}</button>
