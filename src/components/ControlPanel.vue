@@ -71,6 +71,8 @@ const props = defineProps({
   growing: { type: Boolean, default: false },
   growthProgress: { type: Number, default: 0 },
   growthTotal: { type: Number, default: 0 },
+  showModelLights: { type: Boolean, default: false },
+  showAnimation: { type: Boolean, default: true },
   cardBrightness: { type: Number, default: 1 },
   glassBrightness: { type: Number, default: 1 },
   cardColor: { type: String, default: '#64dcff' },
@@ -157,7 +159,7 @@ watch(() => props.lightSources, (val) => {
           </div>
 
           <!-- 动画控制 -->
-          <div class="section">
+          <div v-if="showAnimation" class="section">
             <div class="section-title">🔄 动画控制</div>
             <div class="anim-row">
               <button class="play-btn" @click="togglePlay" :title="playing ? '暂停' : '播放'">
@@ -186,7 +188,7 @@ watch(() => props.lightSources, (val) => {
           </div>
 
           <!-- 模型灯光控制 -->
-          <div class="section">
+          <div v-if="showModelLights" class="section">
             <div class="section-title">🎨 模型灯光</div>
             <div class="light-control-row">
               <span class="lc-label">📦 卡片亮度</span>

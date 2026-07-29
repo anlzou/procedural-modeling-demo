@@ -65,6 +65,13 @@ const paths = [
     desc: '使用 Three.js CSS3DRenderer 将 HTML 元素渲染到 3D 空间，展示产品模型',
     icon: '🛍️',
     color: '#8b5cf6',
+  },
+  {
+    id: 'open-sea',
+    title: 'WebGPU 与 Three.js TSL 节点着色器',
+    desc: '实时程序化海洋渲染 — WebGPU · Three.js TSL · Gerstner 波 · FBM 微表面 · 光谱天空',
+    icon: '🌊',
+    color: '#0ea5e9',
   }
 ]
 </script>

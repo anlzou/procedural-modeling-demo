@@ -6,7 +6,7 @@
 
 ## 📖 简介
 
-使用 **Vue 3 + Vite + Three.js** 实现 5 种 3D 渲染/建模路径，每个路径都配有可交互的 Demo 页面。
+使用 **Vue 3 + Vite + Three.js** 实现 6 种 3D 渲染/建模路径，每个路径都配有可交互的 Demo 页面。
 
 **路径一览：**
 
@@ -17,6 +17,7 @@
 | 🌀 **Parametric Geometry** | 参数化曲面 f(u,v)→(x,y,z) | 精确数学控制，适合艺术曲面 |
 | 🌿 **L-System / 分形** | 字符串重写规则生成递归结构 | 12 种预设，生长动画 |
 | 🧪 **CSS3D 渲染** | CSS3DRenderer 将 HTML 渲染到 3D 空间 | 元素周期表 + 产品展示，Bloom 后处理，玻璃展柜 |
+| 🌊 **WebGPU Ocean** | WebGPU + Three.js TSL 节点着色器 | 实时程序化海洋，Gerstner 波，自适应画质 |
 
 ---
 
@@ -143,22 +144,36 @@
 
 展柜灯光颜色通过 **CSS 自定义属性**（`--gr`/`--gg`/`--gb`）实现，所有 `@keyframes` 动画（`breatheLight`、`ringPulse`、`cubeGlow`）实时跟随颜色变化。
 
+### 🌊 路径 6：WebGPU Ocean（WebGPU 实时海洋）
+
+> 实时程序化海洋渲染 — WebGPU · Three.js TSL · Gerstner 波 · FBM 微表面 · 光谱天空
+
+- **🌊 程序化波浪** — 五方向 Gerstner 涌浪叠加（波长 5→60），含解析法线/切线计算
+- **🌅 动态天空** — 基于太阳位置的光谱散射天空（天顶 ↔ 地平线插值）+ 程序化云层
+- **☀️ 时段切换** — 黄昏 → 黄金时段 → 午后 → 正午，颜色平滑插值
+- **✨ 光照特效** — Fresnel 天空反射、Bloom 泛光、噪声调制的太阳闪烁、波峰泡沫
+- **🖥️ 自适应画质** — 5 级质量档位，GPU 基准测试 + 实时 FPS 监控自动升降档
+- **🌐 中英文切换** — 一键切换界面语言
+- **控制面板** — 左上角 InfoPanel 集成海况/时段/画质/漫游/语言控制 + 右下角性能监控与面板透明度
+
+---
+
 ### 🖥️ 通用控制面板
 
 所有 3D 页面共享的控制面板（右下角）提供：
 
-| 功能 | 说明 |
-|------|------|
-| 📊 **性能监控** | FPS、内存占用、对象数实时显示（固定区域） |
-| 💡 **光源控制** | 各光源独立开关 + 全局强度滑块 (0~2x) |
-| 🎨 **模型灯光** | 卡片/展柜独立亮度 (0~2x) + 颜色选择 + 重置 |
-| 🔄 **动画控制** | 播放/暂停 + 速度滑块 (0~3x) |
-| 🌱 **生长控制** | LSystem 页面：生长播放/暂停 + 速度滑块 + 进度条 |
-| 🎯 **布局切换** | CSS3D 页面：TABLE / SPHERE / HELIX / GRID 四布局（插槽） |
-| 🔍 **面板透明度** | 背景透明度滑条 |
-| 📌 **置顶** | 点击置顶按钮后面板不自动收起 |
+| 功能 | 说明 | 适用页面 |
+|------|------|---------|
+| 📊 **性能监控** | FPS、内存占用、对象数实时显示（固定区域） | 所有 |
+| 💡 **光源控制** | 各光源独立开关 + 全局强度滑块 (0~2x) | 带光源的页面 |
+| 🎨 **模型灯光** | 卡片/展柜独立亮度 (0~2x) + 颜色选择 + 重置 | 仅产品展示 |
+| 🔄 **动画控制** | 播放/暂停 + 速度滑块 (0~3x) | SDF / Cubes / Parametric / LSystem / CSS3D |
+| 🌱 **生长控制** | LSystem 页面：生长播放/暂停 + 速度滑块 + 进度条 | 仅 LSystem |
+| 🎯 **布局切换** | CSS3D 页面：TABLE / SPHERE / HELIX / GRID 四布局（插槽） | 仅周期表 |
+| 🔍 **面板透明度** | 背景透明度滑条（控制面板 + 信息面板同步） | 所有 |
+| 📌 **置顶** | 点击置顶按钮后面板不自动收起 | 所有 |
 
-控制面板采用**固定头部 + 滚动底部**布局，性能监控区固定，其余区域可弹性滚动。
+控制面板采用**固定头部 + 滚动底部**布局，性能监控区固定，其余区域可弹性滚动。各功能模块按需显示（通过 prop 控制），不同页面展示不同组合。
 
 ### 📋 信息面板
 
@@ -166,6 +181,7 @@
 
 - **L-System 页面**：预设按钮按分类（植物/分形/曲线）分组展示
 - **CSS3D 页面**：2×2 网格布局展示快捷键、鼠标操作、搜索提示、布局说明 + 模型选择按钮
+- **OpenSea 页面**：海况/时段滑条、画质指示、漫游/语言切换、FPS 显示
 
 ---
 
@@ -196,11 +212,12 @@ procedural-modeling-demo/
 │   │   └── elementData.js          # 118 种化学元素完整数据 + 搜索函数
 │   │
 │   ├── views/
-│   │   ├── Home.vue                # 首页 - 五张导航卡片
+│   │   ├── Home.vue                # 首页 - 六张导航卡片
 │   │   ├── SDFRaymarching.vue      # 🔮 路径 1
 │   │   ├── MarchingCubes.vue       # 🧊 路径 2（预设切换、居中视图）
 │   │   ├── ParametricGeometry.vue  # 🌀 路径 3
 │   │   ├── LSystem.vue             # 🌿 路径 4（生长动画、分类分组、多色渲染）
+│   │   ├── OpenSea.vue             # 🌊 路径 6（WebGPU 海洋，TSL 节点着色器）
 │   │   └── CSS3DRenderer/
 │   │       ├── CSS3DRenderer.vue    # 🧪 路径 5 入口，模型切换
 │   │       ├── PeriodicTable.vue    # 📋 元素周期表
@@ -224,7 +241,8 @@ procedural-modeling-demo/
 |------|------|------|
 | [Vue 3](https://vuejs.org/) | ^3.5+ | 前端框架 |
 | [Vite](https://vitejs.dev/) | ^8.1+ | 构建工具 |
-| [Three.js](https://threejs.org/) | ^0.185+ | 3D 渲染引擎 |
+| [Three.js](https://threejs.org/) | ^0.185+ | 3D 渲染引擎（WebGL / WebGPU） |
+| [Three.js TSL](https://threejs.org/docs/#manual/en/introduction/Node-system) | — | 节点式着色器系统（OpenSea 使用） |
 | [Vue Router](https://router.vuejs.org/) | ^4.6+ | 前端路由 |
 | [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) | ^25+ | CSS3D 布局过渡动画 |
 
@@ -237,16 +255,16 @@ procedural-modeling-demo/
 cd procedural-modeling-demo
 
 # 2. 安装依赖（如果尚未安装）
-npm install
+pnpm install
 
 # 3. 启动开发服务器
-npm run dev
+pnpm dev
 
 # 4. 构建生产版本
-npm run build
+pnpm build
 
 # 5. 预览生产构建
-npm run preview
+pnpm preview
 ```
 
 启动后浏览器访问 http://localhost:5173/（如果端口被占用会自动递增）。
@@ -257,13 +275,13 @@ npm run preview
 
 ```bash
 # 1. 创建 Vue + Vite 项目
-npm create vite@latest procedural-modeling-demo -- --template vue
+pnpm create vite@latest procedural-modeling-demo -- --template vue
 
 # 2. 进入项目
 cd procedural-modeling-demo
 
 # 3. 安装 Three.js 和 Vue Router
-npm install three vue-router@4
+pnpm add three vue-router@4
 
 # 4. 创建目录结构
 mkdir -p src/router src/views src/components src/utils src/shaders
@@ -281,6 +299,7 @@ mkdir -p src/router src/views src/components src/utils src/shaders
 | `/parametric` | `ParametricGeometry.vue` | 参数化曲面 |
 | `/lsystem` | `LSystem.vue` | L-System 分形 |
 | `/css3d` | `CSS3DRenderer/CSS3DRenderer.vue` | CSS3D 渲染（周期表 / 产品展示） |
+| `/open-sea` | `OpenSea.vue` | WebGPU 实时海洋，TSL 节点着色器 |
 
 ---
 
@@ -331,10 +350,10 @@ git clone <repository-url> procedural-modeling-demo
 cd procedural-modeling-demo
 
 # 安装依赖
-npm install
+pnpm install
 
 # 启动开发
-npm run dev
+pnpm dev
 ```
 
 ---
@@ -361,3 +380,4 @@ npm run dev
 | [OpenCV、MediaPipe、WebAssembly.md](doc/OpenCV%E3%80%81MediaPipe%E3%80%81WebAssembly.md) | OpenCV 计算机视觉、MediaPipe AI 感知与 WebAssembly 跨平台运行时详解 |
 | [PolygonFileFormat.md](doc/PolygonFileFormat.md) | PLY（Polygon File Format）多边形文件格式结构、编码与解析 |
 | [3DGaussianSplatting.md](doc/3DGaussianSplatting.md) | 3D Gaussian Splatting（高斯泼溅）技术原理、数学推导与实现细节 |
+| [OpenSea.md](doc/OpenSea.md) | Open Sea 实时程序化海洋渲染 — WebGPU · Three.js TSL 技术详解 |

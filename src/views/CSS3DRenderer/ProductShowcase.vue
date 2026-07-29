@@ -547,7 +547,7 @@ function animate() {
       </div>
     </InfoPanel>
 
-    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount"
+    <ControlPanel :fps="fps" :memory="memory" :objectCount="objectCount" :showModelLights="true"
       :cardBrightness="cardBrightness" :glassBrightness="glassBrightness"
       :cardColor="cardLightColor" :glassColor="glassLightColor"
       @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed"

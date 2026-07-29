@@ -14,6 +14,7 @@ const routes = [
   { path: '/lsystem', name: 'LSystem', component: LSystem },
   { path: '/periodic-table', name: 'PeriodicTable', component: () => import('../views/CSS3DRenderer/PeriodicTable.vue') },
   { path: '/product-showcase', name: 'ProductShowcase', component: () => import('../views/CSS3DRenderer/ProductShowcase.vue') },
+  { path: '/open-sea', name: 'OpenSea', component: () => import('../views/OpenSea.vue') },
 ]
 
 const router = createRouter({
