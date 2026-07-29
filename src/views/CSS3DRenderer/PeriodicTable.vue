@@ -1,11 +1,11 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { Tween, Easing, Group } from '@tweenjs/tween.js'
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js'
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 import InfoPanel from '../../components/InfoPanel.vue'
-import ControlPanel from '../../components/ControlPanel.vue'
+const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
 import FeaturePanel from '../../components/FeaturePanel.vue'
 import ElementDetail from '../../components/ElementDetail.vue'
 import { ELEMENTS, getElementDetail, searchElements } from '../../utils/elementData.js'

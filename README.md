@@ -248,6 +248,32 @@ procedural-modeling-demo/
 
 ---
 
+## ⚡ 性能优化
+
+### 按需加载策略
+
+项目采用**路由级动态导入 + 组件级懒加载**，确保首页轻量快速：
+
+| 机制 | 说明 | 效果 |
+|------|------|------|
+| **路由动态导入** | 所有子页面使用 `() => import(...)` | 首页仅加载 ~106 KB |
+| **组件懒加载** | `ControlPanel` 使用 `defineAsyncComponent` | 进入 3D 页面时才下载 ~8.5 KB |
+| **Three.js 独立 chunk** | `manualChunks` 提取 `three` / `three/webgpu` | 全局共享一份，gzip ~337 KB |
+
+### 构建产物
+
+| 文件 | 大小 | 说明 |
+|------|------|------|
+| `index-xxx.js` | **~106 KB** | 首页：仅 Vue + Router + Home 组件 |
+| `three-xxx.js` | **~1,283 KB (gzip 337 KB)** | Three.js 核心库，全局共享一份 |
+| `ControlPanel-xxx.js` | **~8.5 KB** | 控制面板（进入 3D 页面后按需加载） |
+| 各视图 chunk | **~5-45 KB** | 每个页面仅含自身代码，共享 three chunk |
+| `OpenSea-xxx.js` | **~14 KB** | OpenSea 视图代码（不含 three/webgpu） |
+
+> 三个体积较大的 Three.js 后端（`three` / `three/webgpu` / `three/addons`）被提取为独立 chunk，不会重复打包到每个页面中。浏览器缓存一次后，所有页面共享。
+
+---
+
 ## 🚀 运行方式
 
 ```bash

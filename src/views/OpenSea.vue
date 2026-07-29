@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
@@ -10,7 +10,7 @@ import {
   positionLocal, positionWorld, cameraPosition
 } from 'three/tsl'
 import InfoPanel from '../components/InfoPanel.vue'
-import ControlPanel from '../components/ControlPanel.vue'
+const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
    Reactive state

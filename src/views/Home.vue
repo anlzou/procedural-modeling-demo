@@ -95,7 +95,7 @@ const paths = [
         <h3>{{ p.title }}</h3>
         <p>{{ p.desc }}</p>
         <div class="card-footer">
-          <span class="btn">查看 Demo →</span>
+          <span class="btn">查看 Demo</span>
         </div>
       </div>
     </div>

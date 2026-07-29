@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import InfoPanel from '../../components/InfoPanel.vue'
-import ControlPanel from '../../components/ControlPanel.vue'
+const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
 
 const emit = defineEmits(['switchModel'])
 const containerRef = ref(null)

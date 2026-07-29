@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { LSystem, L_SYSTEM_PRESETS } from '../utils/lsystem.js'
 import InfoPanel from '../components/InfoPanel.vue'
-import ControlPanel from '../components/ControlPanel.vue'
+const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, group, animationId
