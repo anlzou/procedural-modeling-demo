@@ -32,6 +32,7 @@ const driftEnabled = ref(true)
 // Fish system state
 const fishSystem = ref(null)
 const fishCamActive = ref(false)
+const fishLoadError = ref('')
 const simPaused = ref(false)
 const simSpeed = ref(1)
 const aquariumSize = ref(20)
@@ -666,6 +667,13 @@ async function init() {
     // Initialize fish system
     fishSystem.value = createFishSystem({ scene, controls, aquariumSize: 20, showBoundary: false })
     fishCamActive.value = false
+    // Show error toast if fish model failed to load
+    setTimeout(() => {
+      if (fishSystem.value?.loadError) {
+        fishLoadError.value = fishSystem.value.loadError
+        setTimeout(() => { fishLoadError.value = '' }, 6000)
+      }
+    }, 3000)
 
     // Space key → toggle fish cam
     onSpaceKey = (e) => {
@@ -744,6 +752,9 @@ onBeforeUnmount(() => {
   <div ref="containerRef" class="open-sea-container">
     <!-- Vignette overlay -->
     <div class="vignette" aria-hidden="true"></div>
+
+    <!-- Fish load error toast -->
+    <div v-if="fishLoadError" class="error-toast">{{ fishLoadError }}</div>
 
     <!-- InfoPanel with ocean controls -->
     <InfoPanel>
@@ -1219,6 +1230,29 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   color: rgba(255, 255, 255, 0.32);
   text-align: center;
+}
+
+.error-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 10px 22px;
+  border-radius: 8px;
+  background: rgba(233, 115, 106, 0.88);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  white-space: nowrap;
+  animation: toastIn 0.35s ease;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @media (max-width: 768px) {

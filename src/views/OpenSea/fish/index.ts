@@ -6,7 +6,7 @@ import {
   disposeFishMesh,
   updateFishInstances,
 } from './instanced-school-renderer.js'
-import { loadFishModel, isReady, createFishModelInstanceByKey } from './model-loader.js'
+import { loadFishModel, isReady, getLoadError, createFishModelInstanceByKey } from './model-loader.js'
 import { createCameraRig } from './camera-rig.js'
 import { createDefaultSettings, fishConfig, obstacles, virtualAquarium, setAquariumSize } from './config.js'
 import type { FishState, SimulationSettings } from './types.js'
@@ -41,6 +41,7 @@ export interface FishSystem {
   cameraRig: ReturnType<typeof createCameraRig>
   controls: FishControls
   ready: boolean
+  loadError: string | null
   getRandomFish(): FishState | null
   update(dt: number): void
   updateLights(sunDir: THREE.Vector3, sunColor: THREE.Color): void
@@ -304,6 +305,7 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
 
   return {
     get ready() { return ready },
+    get loadError() { return getLoadError() },
     cameraRig,
     controls,
     getRandomFish,

@@ -29,11 +29,17 @@ const tmpSize = new THREE.Vector3()
 
 let fishModels: FishModel[] = []
 let loadDone = false
+let loadError: string | null = null
 let loadPromise: Promise<void> | null = null
 
 /** Returns true once GLB models have finished loading */
 export function isReady(): boolean {
-  return loadDone
+  return loadDone && loadError === null
+}
+
+/** Returns the last load error message, or null if loading succeeded */
+export function getLoadError(): string | null {
+  return loadError
 }
 
 export async function loadFishModel(): Promise<void> {
@@ -43,29 +49,40 @@ export async function loadFishModel(): Promise<void> {
 }
 
 async function _load(): Promise<void> {
-  const loader = new GLTFLoader()
-  const results = await Promise.allSettled(
-    fishModelSources.map((s) => loader.loadAsync(s.url.href)),
-  )
-  const loaded: FishModel[] = []
-  for (let i = 0; i < results.length; i += 1) {
-    const src = fishModelSources[i]
-    const r = results[i]
-    if (r.status === 'fulfilled') {
-      loaded.push(createFishModelFromGltf(r.value, src))
-    } else {
-      console.warn(`Failed to load ${src.key} fish model.`, r.reason)
+  const MAX_RETRIES = 5
+  const RETRY_DELAY = 6 * 1000 // 6 seconds
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    loadError = null
+    const loader = new GLTFLoader()
+    const results = await Promise.allSettled(
+      fishModelSources.map((s) => loader.loadAsync(s.url.href)),
+    )
+    const loaded: FishModel[] = []
+    for (let i = 0; i < results.length; i += 1) {
+      const src = fishModelSources[i]
+      const r = results[i]
+      if (r.status === 'fulfilled') {
+        loaded.push(createFishModelFromGltf(r.value, src))
+      } else {
+        console.warn(`Failed to load ${src.key} fish model (attempt ${attempt}/${MAX_RETRIES}).`, r.reason)
+      }
+    }
+    if (loaded.length) {
+      fishModels = loaded
+      const cartoon = loaded.find((m) => m.key === 'cartoon') ?? loaded[0]
+      fishModels.push(createKoiModelFromBase(cartoon))
+      loadDone = true
+      return
+    }
+    if (attempt < MAX_RETRIES) {
+      console.warn(`Fish model load attempt ${attempt}/${MAX_RETRIES} failed. Retrying in ${RETRY_DELAY / 1000}s...`)
+      await new Promise((r) => setTimeout(r, RETRY_DELAY))
     }
   }
-  if (!loaded.length) {
-    console.error('All fish models failed to load — no fish will be visible.')
-    loadDone = true
-    return
-  }
-  fishModels = loaded
-  const cartoon = loaded.find((m) => m.key === 'cartoon') ?? loaded[0]
-  fishModels.push(createKoiModelFromBase(cartoon))
+  loadError = '鱼模型文件下载失败，请检查网络连接后刷新页面重试'
   loadDone = true
+  console.error('All fish models failed to load after 5 retries.')
 }
 
 function findPrimaryMesh(root: THREE.Object3D): THREE.Mesh | null {
