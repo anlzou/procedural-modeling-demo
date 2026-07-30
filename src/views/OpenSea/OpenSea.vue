@@ -31,6 +31,7 @@ const driftEnabled = ref(true)
 
 // Fish system state
 const fishSystem = ref(null)
+const fishReady = ref(false)
 const fishCamActive = ref(false)
 const fishLoadError = ref('')
 const fishLoadProgress = ref(0)
@@ -600,11 +601,14 @@ async function frame() {
     }
   }
 
-  // Track fish model download progress
-  if (fishSystem.value && !fishSystem.value.ready) {
-    fishLoadProgress.value = fishSystem.value.loadProgress
-  } else if (fishSystem.value?.ready && fishLoadProgress.value < 1) {
-    fishLoadProgress.value = 1
+  // Track fish model download progress and ready state
+  if (fishSystem.value) {
+    fishReady.value = fishSystem.value.ready
+    if (!fishSystem.value.ready) {
+      fishLoadProgress.value = fishSystem.value.loadProgress
+    } else if (fishLoadProgress.value < 1) {
+      fishLoadProgress.value = 1
+    }
   }
 
   PERF.tick(dt)
@@ -842,7 +846,7 @@ onBeforeUnmount(() => {
           <span class="control-value">{{ fishDisplay.sardineCount }}</span>
         </div>
         <input id="sardine-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.sardineCount"
-          :disabled="!fishSystem?.value?.ready"
+          :disabled="!fishReady"
           @input="onFishControl('sardineCount', $event)" />
       </div>
 
@@ -852,7 +856,7 @@ onBeforeUnmount(() => {
           <span class="control-value">{{ fishDisplay.koiCount }}</span>
         </div>
         <input id="koi-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.koiCount"
-          :disabled="!fishSystem?.value?.ready"
+          :disabled="!fishReady"
           @input="onFishControl('koiCount', $event)" />
       </div>
 

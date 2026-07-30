@@ -77,7 +77,11 @@ function createFishMeshFromModel(
 export function disposeFishMesh(mesh: THREE.InstancedMesh | null): void {
   if (!mesh) return
   mesh.geometry.dispose()
-  disposeFishMaterial(mesh.material)
+  if (Array.isArray(mesh.material)) {
+    mesh.material.forEach((m) => disposeFishMaterial(m))
+  } else {
+    disposeFishMaterial(mesh.material)
+  }
 }
 
 export function updateFishInstances(
@@ -90,7 +94,7 @@ export function updateFishInstances(
   const count = Math.min(fish.length, mesh.count)
 
   for (let i = 0; i < count; i += 1) {
-    const currentFish = fish[i]
+    const currentFish: FishState | undefined = fish[i]
     if (!currentFish) continue
     const direction = readFishDirection(currentFish, tmpDirection)
     writeFishOrientationQuaternion(currentFish, direction, tmpQuaternion)

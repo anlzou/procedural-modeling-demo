@@ -6,10 +6,10 @@ import {
   disposeFishMesh,
   updateFishInstances,
 } from './instanced-school-renderer.js'
-import { loadFishModel, isReady, getLoadError, getLoadProgress, getModelKeys, createFishModelInstanceByKey } from './model-loader.js'
+import { loadFishModel, isReady, getLoadError, getLoadProgress, getModelKeys } from './model-loader.js'
 import { createCameraRig } from './camera-rig.js'
-import { createDefaultSettings, fishConfig, obstacles, virtualAquarium, setAquariumSize } from './config.js'
-import type { FishState, SimulationSettings } from './types.js'
+import { createDefaultSettings, obstacles, virtualAquarium, setAquariumSize } from './config.js'
+import type { FishState } from './types.js'
 
 export interface FishSystemOptions {
   scene: THREE.Scene

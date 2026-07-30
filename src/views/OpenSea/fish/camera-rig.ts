@@ -66,21 +66,21 @@ export function createCameraRig(existingControls: any) {
         smoothedFishDirection.lerp(pose.direction, directionAlpha).normalize()
       }
 
-      fishCamera.position.copy(smoothedFishPosition)
+      ;(fishCamera as any).position.copy(smoothedFishPosition)
       up.copy(worldUp).addScaledVector(smoothedFishDirection, -worldUp.dot(smoothedFishDirection))
       if (up.lengthSq() < 0.0001) {
         up.copy(fallbackUp).addScaledVector(smoothedFishDirection, -fallbackUp.dot(smoothedFishDirection))
       }
-      fishCamera.up.copy(up.normalize())
-      fishCamera.lookAt(
+      ;(fishCamera as any).up.copy(up.normalize())
+      ;(fishCamera as any).lookAt(
         target.copy(smoothedFishPosition).addScaledVector(smoothedFishDirection, FISH_CAMERA_LOOK_AHEAD),
       )
     },
 
     resize(width: number, height: number) {
       const aspect = Math.max(1, width) / Math.max(1, height)
-      fishCamera.aspect = aspect
-      fishCamera.updateProjectionMatrix()
+      ;(fishCamera as any).aspect = aspect
+      ;(fishCamera as any).updateProjectionMatrix()
     },
   }
 }
