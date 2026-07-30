@@ -70,7 +70,7 @@ async function _load(): Promise<void> {
 
 function findPrimaryMesh(root: THREE.Object3D): THREE.Mesh | null {
   let result: THREE.Mesh | null = null
-  root.traverse((obj) => { if (obj instanceof THREE.Mesh && obj.geometry && !result) result = obj })
+  root.traverse((obj: THREE.Object3D) => { if (obj instanceof THREE.Mesh && obj.geometry && !result) result = obj })
   return result
 }
 
@@ -144,7 +144,7 @@ function getKoiTexture(): THREE.CanvasTexture {
 
 function createKoiModelFromBase(base: FishModel): FishModel {
   const geo = base.geometry.clone()
-  const mat = cloneFishMaterial(base.material)
+  const mat = cloneFishMaterial(base.material) as THREE.MeshStandardMaterial
   mat.color.setHex(0xfff0dc)
   mat.map = getKoiTexture()
   mat.needsUpdate = true
@@ -172,9 +172,9 @@ function cloneFishMaterial(material: THREE.Material | THREE.Material[]): THREE.M
   const src = Array.isArray(material) ? material[0] : material
   const m = src.clone()
   if ('roughness' in m) m.roughness = 1
-  if ('roughnessMap' in m) m.roughnessMap = null
+  if ('roughnessMap' in m) m.roughnessMap = undefined
   if ('metalness' in m) m.metalness = 0
-  if ('metalnessMap' in m) m.metalnessMap = null
+  if ('metalnessMap' in m) m.metalnessMap = undefined
   m.side = THREE.FrontSide; m.needsUpdate = true
   return m
 }
