@@ -23,6 +23,8 @@ const fpsDisplay = ref('--')
 const qualityLabel = ref('中')
 const qualityBadge = ref('自适应')
 const timeLabel = ref('午后')
+const timeSliderValue = ref(55)
+const realTimeMode = ref(true)
 const seaValue = ref('0.93')
 const currentLang = ref('zh')
 const driftEnabled = ref(true)
@@ -89,6 +91,7 @@ const uZenithColor = uniform(new THREE.Color(0.07, 0.2, 0.42))
 const uDeepColor = uniform(new THREE.Color(0.015, 0.09, 0.11))
 const uShallowColor = uniform(new THREE.Color(0.06, 0.32, 0.36))
 const uFbmOctaves = uniform(3)
+const uNightFactor = uniform(0.0)
 
 /* ---------------------------------------------------------------------------
    Waves — five directional Gerstner components
@@ -202,8 +205,10 @@ const skyColor = Fn(([dir]) => {
   const haze = smoothstep(0.0, -0.15, d.y)
   col.assign(mix(col, uDeepColor.mul(1.4).add(uHorizonColor.mul(0.25)), haze))
   const s = max(dot(d, uSunDir), 0.0)
+  // Sun glow — soft halo
   col.addAssign(uSunColor.mul(pow(s, 10.0).mul(0.18)))
-  col.addAssign(uSunColor.mul(smoothstep(0.9994, 0.9998, s).mul(30.0)))
+  // Sun disc — bright circle
+  col.addAssign(uSunColor.mul(smoothstep(0.9990, 0.9997, s).mul(40.0)))
   return col
 })
 
@@ -218,6 +223,20 @@ const skyDomeColor = Fn(() => {
   const sunTint = normalize(uSunColor.add(vec3(0.0001)))
   const cloudColor = vec3(0.92, 0.90, 0.87).mul(mix(vec3(1.0), sunTint, 0.35))
   col.assign(mix(col, cloudColor, clamp(cloudMask, 0.0, 1.0).mul(0.6)))
+
+  // Moon: full circular disc (圆形)
+  // Moon sits opposite the sun with a slight inclination offset
+  const moonDir = uSunDir.negate().add(vec3(0.0, 0.15, 0.0)).normalize()
+  const moonDot = max(dot(dir, moonDir), 0.0)
+
+  // Soft glow around the moon
+  const moonGlow = pow(moonDot, 6.0).mul(0.06)
+
+  // Full moon disc
+  const moonDisc = smoothstep(0.9992, 0.9997, moonDot).mul(4.0)
+
+  col.addAssign(uNightFactor.mul(vec3(0.30, 0.35, 0.55).mul(moonGlow.add(moonDisc))))
+
   return vec4(col, 1.0)
 })
 
@@ -250,6 +269,14 @@ const oceanColor = Fn(() => {
   const sparkle = pow(ndh, 500.0).mul(mix(0.4, 3.4, sparkleNoise))
   const sheen = pow(ndh, 48.0).mul(0.12)
   col.addAssign(uSunColor.mul(sparkle.add(sheen)))
+
+  // Moonlight reflection on water — moon opposite sun
+  const moonDir2 = uSunDir.negate().add(vec3(0.0, 0.15, 0.0)).normalize()
+  const Hmoon = normalize(moonDir2.add(V))
+  const ndhm = max(dot(N, Hmoon), 0.0)
+  const moonSpec = pow(ndhm, 80.0).mul(0.06)
+  col.addAssign(uNightFactor.mul(vec3(0.30, 0.35, 0.55).mul(moonSpec)))
+
   const foamNoise = fbm(xz.mul(1.1).add(vec2(uTime.mul(0.22), uTime.mul(0.14)))).mul(0.5).add(0.5)
   const foamMask = smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest))
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), clamp(foamMask.mul(0.85), 0.0, 1.0)))
@@ -266,6 +293,7 @@ initPerfEngine()
    --------------------------------------------------------------------------- */
 let renderer, scene, camera, controls, postProcessing
 let lastNow = 0
+let lastRealTimeSync = 0
 let revealed = false
 let fpsAccum = 0
 let fpsCount = 0
@@ -292,31 +320,141 @@ const DUSK = {
   deep: new THREE.Color(0.02, 0.045, 0.075),
   shallow: new THREE.Color(0.09, 0.15, 0.20)
 }
+const NIGHT = {
+  zenith: new THREE.Color(0.005, 0.008, 0.03),
+  horizon: new THREE.Color(0.08, 0.12, 0.25),
+  sun: new THREE.Color(0.30, 0.35, 0.55),
+  intensity: 0.3,
+  deep: new THREE.Color(0.002, 0.005, 0.015),
+  shallow: new THREE.Color(0.01, 0.03, 0.06)
+}
 
 function getTimeLabel(val) {
-  if (val < 0.12) return t('time.dusk')
-  if (val < 0.30) return t('time.golden')
-  if (val < 0.62) return t('time.afternoon')
-  return t('time.midday')
+  if (val < 0.15) return t('time.midnight')
+  if (val < 0.30) return t('time.dawn')
+  if (val < 0.70) return t('time.midday')
+  if (val < 0.85) return t('time.dusk')
+  return t('time.midnight')
 }
 
 function applyTimeOfDay(t) {
-  const elevation = THREE.MathUtils.lerp(-0.05, 0.62, t)
-  const azimuth = THREE.MathUtils.lerp(-0.9, 0.9, t)
+  // Time-of-day cycle: 0=午夜(midnight) → 0.15=晨曦(dawn) → 0.30=正午(noon) → 0.70=黄昏(dusk) → 0.85=午夜 → 1.0
+  // Sun arcs east→south→west (azimuth = t * 2π), peaking at 1.0 rad (57°) at noon
+  let paletteT, paletteA, paletteB
+
+  // Palette transitions aligned with labels:
+  // 0──0.15 午夜(NIGHT) ──0.30 晨曦(NIGHT→DUSK→DAY) ──0.70 正午(DAY) ──0.85 黄昏(DUSK→NIGHT) ──1.0 午夜
+  if (t < 0.15) {
+    // Night (deep)
+    paletteT = 0
+    paletteA = NIGHT; paletteB = NIGHT
+  } else if (t < 0.22) {
+    // Dawn twilight: Night → Dusk
+    paletteT = (t - 0.15) / 0.07
+    paletteA = NIGHT; paletteB = DUSK
+  } else if (t < 0.30) {
+    // Sunrise: Dusk → Day
+    paletteT = (t - 0.22) / 0.08
+    paletteA = DUSK; paletteB = DAY
+  } else if (t < 0.70) {
+    // Day (midday plateau)
+    paletteT = 0
+    paletteA = DAY; paletteB = DAY
+  } else if (t < 0.78) {
+    // Sunset: Day → Dusk
+    paletteT = (t - 0.70) / 0.08
+    paletteA = DAY; paletteB = DUSK
+  } else if (t < 0.85) {
+    // Evening twilight: Dusk → Night
+    paletteT = (t - 0.78) / 0.07
+    paletteA = DUSK; paletteB = NIGHT
+  } else {
+    // Night (deep)
+    paletteT = 0
+    paletteA = NIGHT; paletteB = NIGHT
+  }
+
+  const w = paletteT
+
+  // Sun elevation: smooth arc peaking at 1.0 rad (57°) at noon
+  const noonPeak = 1.0  // radians — clearly visible above horizon
+  const nightLow = -0.35
+  let elevation
+  if (t < 0.15) {
+    elevation = nightLow
+  } else if (t < 0.30) {
+    // Dawn rise: below horizon → above
+    const p = (t - 0.15) / 0.15
+    const sp = p * p * (3 - 2 * p)  // smoothstep
+    elevation = THREE.MathUtils.lerp(nightLow, noonPeak * 0.4, sp)
+  } else if (t < 0.50) {
+    // Climb to zenith
+    const p = (t - 0.30) / 0.20
+    const sp = p * p * (3 - 2 * p)
+    elevation = THREE.MathUtils.lerp(noonPeak * 0.4, noonPeak, sp)
+  } else if (t < 0.70) {
+    // Descend from zenith
+    const p = (t - 0.50) / 0.20
+    const sp = p * p * (3 - 2 * p)
+    elevation = THREE.MathUtils.lerp(noonPeak, noonPeak * 0.4, sp)
+  } else if (t < 0.85) {
+    // Sunset: above horizon → below
+    const p = (t - 0.70) / 0.15
+    const sp = p * p * (3 - 2 * p)
+    elevation = THREE.MathUtils.lerp(noonPeak * 0.4, nightLow, sp)
+  } else {
+    elevation = nightLow
+  }
+
+  // Azimuth: continuous full-circle sweep — east(π/2) → south(π) → west(3π/2)
+  // At t=0.25 (dawn):  az = π/2 → sun in east (+x)
+  // At t=0.50 (noon):  az = π   → sun in south (+z)
+  // At t=0.75 (dusk):  az = 3π/2 → sun in west (-x)
+  const azimuth = t * 2 * Math.PI
+
   uSunDir.value.set(
     Math.cos(elevation) * Math.sin(azimuth),
     Math.sin(elevation),
     -Math.cos(elevation) * Math.cos(azimuth)
   )
-  const x = THREE.MathUtils.clamp(elevation / 0.42, 0, 1)
-  const w = x * x * (3 - 2 * x)
-  uZenithColor.value.copy(DUSK.zenith).lerp(DAY.zenith, w)
-  uHorizonColor.value.copy(DUSK.horizon).lerp(DAY.horizon, w)
-  uDeepColor.value.copy(DUSK.deep).lerp(DAY.deep, w)
-  uShallowColor.value.copy(DUSK.shallow).lerp(DAY.shallow, w)
-  const intensity = THREE.MathUtils.lerp(DUSK.intensity, DAY.intensity, w)
-  uSunColor.value.copy(DUSK.sun).lerp(DAY.sun, w).multiplyScalar(intensity)
+
+  // Night factor: 1=full night (moon visible), 0=full day
+  let nightFactor
+  if (t < 0.15) {
+    nightFactor = 1.0
+  } else if (t < 0.30) {
+    // Night → Day
+    nightFactor = 1.0 - (t - 0.15) / 0.15
+  } else if (t < 0.70) {
+    nightFactor = 0
+  } else if (t < 0.85) {
+    // Day → Night
+    nightFactor = (t - 0.70) / 0.15
+  } else {
+    nightFactor = 1.0
+  }
+  uNightFactor.value = nightFactor
+
+  // Smoothstep the palette interpolation for natural transitions
+  const sw = w * w * (3 - 2 * w)
+
+  uZenithColor.value.copy(paletteA.zenith).lerp(paletteB.zenith, sw)
+  uHorizonColor.value.copy(paletteA.horizon).lerp(paletteB.horizon, sw)
+  uDeepColor.value.copy(paletteA.deep).lerp(paletteB.deep, sw)
+  uShallowColor.value.copy(paletteA.shallow).lerp(paletteB.shallow, sw)
+  const intensity = THREE.MathUtils.lerp(paletteA.intensity, paletteB.intensity, sw)
+  uSunColor.value.copy(paletteA.sun).lerp(paletteB.sun, sw).multiplyScalar(intensity)
+
   timeLabel.value = getTimeLabel(t)
+}
+
+/** Sync time-of-day slider with the current system clock */
+function syncTimeWithSystem() {
+  const now = new Date()
+  const sec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+  const t = sec / 86400  // 0.0 (midnight) → 1.0 (next midnight)
+  timeSliderValue.value = Math.round(t * 100)
+  applyTimeOfDay(t)
 }
 
 /* ---------------------------------------------------------------------------
@@ -329,7 +467,10 @@ function onSeaStateChange(e) {
 }
 
 function onTimeOfDayChange(e) {
-  applyTimeOfDay(Number(e.target.value) / 100)
+  const val = Number(e.target.value)
+  timeSliderValue.value = val
+  realTimeMode.value = false
+  applyTimeOfDay(val / 100)
 }
 
 function toggleDrift() {
@@ -346,7 +487,7 @@ function toggleUltraHd() {
 function toggleLang() {
   currentLang.value = currentLang.value === 'en' ? 'zh' : 'en'
   PERF.updateQualityBadge()
-  applyTimeOfDay(Number(document.getElementById('time-range')?.value || 55) / 100)
+  applyTimeOfDay(timeSliderValue.value / 100)
 }
 
 /* ---------------------------------------------------------------------------
@@ -422,6 +563,14 @@ async function frame() {
   const rawDt = (now - lastNow) / 1000
   lastNow = now
   const dt = Math.min(rawDt, 0.1)
+
+  // Sync with system clock when real-time mode is active (~1s interval)
+  if (realTimeMode.value && rawDt < 0.15) {
+    if (now - lastRealTimeSync > 1000) {
+      lastRealTimeSync = now
+      syncTimeWithSystem()
+    }
+  }
 
   // Advance ocean and fish simulation (paused when simPaused)
   if (!simPaused.value) {
@@ -530,6 +679,7 @@ async function init() {
     document.addEventListener('visibilitychange', onVisibilityChange)
 
     applyTimeOfDay(0.55)
+    syncTimeWithSystem()
 
     await renderer.init()
     lastNow = performance.now()
@@ -621,29 +771,30 @@ onBeforeUnmount(() => {
       <div class="control">
         <div class="control-head">
           <label for="time-range" data-i18n="panel.timeOfDay">{{ t('panel.timeOfDay') }}</label>
-          <span class="control-value">{{ timeLabel }}</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span class="control-value">{{ timeLabel }}</span>
+            <button class="pill lang-pill" style="font-size:9px;min-width:30px;padding:6px 4px;"
+              :class="{ active: realTimeMode }"
+              @click="realTimeMode = !realTimeMode">{{ realTimeMode ? 'ON' : 'OFF' }}</button>
+          </span>
         </div>
-        <input id="time-range" type="range" min="0" max="100" value="55" step="1"
-          @input="onTimeOfDayChange" :aria-label="t('panel.timeOfDay')" />
+        <input id="time-range" type="range" min="0" max="100" step="1"
+          :value="timeSliderValue" @input="onTimeOfDayChange"
+          :aria-label="t('panel.timeOfDay')" />
       </div>
 
-      <!-- Aquarium Size -->
+      <!-- Aquarium Size & Show Boundary -->
       <div class="control">
         <div class="control-head">
           <label for="aquarium-size">{{ t('panel.aquariumSize') }}</label>
-          <span class="control-value">{{ aquariumSize }} × {{ aquariumSize }}</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span class="control-value">{{ aquariumSize }} × {{ aquariumSize }}</span>
+            <button class="pill lang-pill" style="font-size:9px;min-width:30px;padding:6px 4px;"
+              :class="{ active: showBoundary }" @click="toggleBoundary">{{ showBoundary ? 'ON' : 'OFF' }}</button>
+          </span>
         </div>
         <input id="aquarium-size" type="range" min="20" max="100" :value="aquariumSize" step="1"
           @input="onAquariumSizeChange" />
-      </div>
-
-      <!-- Show Boundary -->
-      <div class="control">
-        <div class="control-head">
-          <label for="show-boundary">{{ t('panel.showBoundary') }}</label>
-          <button class="pill" style="padding:4px 14px;font-size:10px;"
-            :class="{ active: showBoundary }" @click="toggleBoundary">{{ showBoundary ? 'ON' : 'OFF' }}</button>
-        </div>
       </div>
 
       <!-- Fish School Controls -->
