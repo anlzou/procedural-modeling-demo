@@ -499,6 +499,7 @@ function toggleLang() {
    --------------------------------------------------------------------------- */
 function onResetCamera() {
   camera.position.copy(initialCamState.pos)
+  camera.up.set(0, 1, 0)
   controls.target.copy(initialCamState.target)
   controls.update()
   if (fishSystem.value?.cameraRig.active) {
@@ -510,7 +511,11 @@ function onToggleFishCam() {
   if (!fishSystem.value?.ready) return
   if (fishSystem.value.cameraRig.active) {
     fishSystem.value.cameraRig.exit()
-    onResetCamera()
+    // Keep camera fixed at current position, update orbit target ahead
+    const dir = new THREE.Vector3()
+    camera.getWorldDirection(dir)
+    controls.target.copy(camera.position).add(dir.multiplyScalar(5))
+    controls.update()
   } else {
     const fish = fishSystem.value.getRandomFish()
     fishSystem.value.cameraRig.enter(fish)
