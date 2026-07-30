@@ -18,7 +18,7 @@ interface FishModel {
 
 const fishModelSources: FishModelSource[] = [
   {
-    key: 'cartoon',
+    key: '',
     url: new URL('./models/cartoon.glb', import.meta.url),
     axes: new THREE.Matrix4().set(0, -1, 0, 0, -1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1),
   },
@@ -46,6 +46,11 @@ export function getLoadError(): string | null {
 /** Returns download progress 0–1, or 0 if not yet started */
 export function getLoadProgress(): number {
   return loadProgress
+}
+
+/** Returns the list of model keys being loaded */
+export function getModelKeys(): string[] {
+  return fishModelSources.map((s) => s.key)
 }
 
 export async function loadFishModel(): Promise<void> {

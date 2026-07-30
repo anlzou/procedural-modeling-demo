@@ -34,6 +34,7 @@ const fishSystem = ref(null)
 const fishCamActive = ref(false)
 const fishLoadError = ref('')
 const fishLoadProgress = ref(0)
+const fishModelKeys = ref([])
 const simPaused = ref(false)
 const simSpeed = ref(1)
 const aquariumSize = ref(20)
@@ -675,6 +676,7 @@ async function init() {
     // Initialize fish system
     fishSystem.value = createFishSystem({ scene, controls, aquariumSize: 20, showBoundary: false })
     fishCamActive.value = false
+    fishModelKeys.value = fishSystem.value.modelKeys
     // Show error toast if fish model failed to load
     setTimeout(() => {
       if (fishSystem.value?.loadError) {
@@ -823,6 +825,17 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!-- Fish model download progress -->
+      <div v-if="fishLoadProgress < 1 && fishSystem" class="fish-progress-wrap">
+        <div class="fish-progress-head">
+          <span class="fish-progress-model">{{ fishModelKeys.join(' · ') }}</span>
+          <span class="fish-progress-pct">{{ Math.round(fishLoadProgress * 100) }}%</span>
+        </div>
+        <div class="fish-progress-track">
+          <div class="fish-progress-bar" :style="{ width: Math.max(fishLoadProgress * 100, 2) + '%' }"></div>
+        </div>
+      </div>
+
       <div class="control">
         <div class="control-head">
           <label for="sardine-count" data-i18n="fish.sardineCount">{{ t('fish.sardineCount') }}</label>
@@ -958,12 +971,6 @@ onBeforeUnmount(() => {
 
       <!-- Hint -->
       <div class="hint-content" aria-hidden="true">{{ t('panel.hint') }} · {{ t('fish.cameraToggle') }}</div>
-
-      <!-- Fish model download progress -->
-      <div v-if="fishLoadProgress < 1 && fishSystem" class="fish-progress-wrap">
-        <div class="fish-progress-bar" :style="{ width: Math.max(fishLoadProgress * 100, 2) + '%' }"></div>
-        <span class="fish-progress-label">{{ Math.round(fishLoadProgress * 100) }}%</span>
-      </div>
     </InfoPanel>
 
     <!-- ControlPanel with transparency slider -->
@@ -1270,12 +1277,31 @@ onBeforeUnmount(() => {
 }
 
 .fish-progress-wrap {
-  margin-top: 16px;
+  margin-bottom: 16px;
   position: relative;
+}
+
+.fish-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.fish-progress-pct {
+  color: #8fe9e4;
+}
+
+.fish-progress-track {
   height: 3px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.1);
-  overflow: visible;
+  overflow: hidden;
 }
 
 .fish-progress-bar {
@@ -1283,16 +1309,6 @@ onBeforeUnmount(() => {
   border-radius: 2px;
   background: linear-gradient(90deg, #8fe9e4, #5bc0be);
   transition: width 0.25s ease;
-}
-
-.fish-progress-label {
-  position: absolute;
-  right: 0;
-  top: -14px;
-  font-family: 'Geist Mono', ui-monospace, monospace;
-  font-size: 8px;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.4);
 }
 
 @media (max-width: 768px) {
