@@ -9,11 +9,11 @@ import {
   fract, floor, smoothstep, distance, reflect, If,
   positionLocal, positionWorld, cameraPosition
 } from 'three/tsl'
-import InfoPanel from '../components/InfoPanel.vue'
-import { t as i18nT } from '../utils/oceanI18n.js'
-import { createPerfEngine } from '../utils/oceanPerf.js'
-import { createFishSystem } from './OpenSea/fish/index.js'
-const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
+import InfoPanel from '../../components/InfoPanel.vue'
+import { t as i18nT } from '../../utils/oceanI18n.js'
+import { createPerfEngine } from '../../utils/oceanPerf.js'
+import { createFishSystem } from './fish/index.js'
+const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
    Reactive state

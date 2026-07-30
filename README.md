@@ -220,11 +220,14 @@ procedural-modeling-demo/
 │   │   ├── MarchingCubes.vue       # 🧊 路径 2（预设切换、居中视图）
 │   │   ├── ParametricGeometry.vue  # 🌀 路径 3
 │   │   ├── LSystem.vue             # 🌿 路径 4（生长动画、分类分组、多色渲染）
-│   │   ├── OpenSea.vue             # 🌊 路径 6（WebGPU 海洋，TSL 节点着色器）
-│   │   └── CSS3DRenderer/
-│   │       ├── CSS3DRenderer.vue    # 🧪 路径 5 入口，模型切换
-│   │       ├── PeriodicTable.vue    # 📋 元素周期表
-│   │       └── ProductShowcase.vue  # 📦 产品展示（玻璃展柜、粒子、Bloom）
+│   │   ├── CSS3DRenderer/
+│   │   │    ├── CSS3DRenderer.vue    # 🧪 路径 5 入口，模型切换
+│   │   │    ├── PeriodicTable.vue    # 📋 元素周期表
+│   │   │    └── ProductShowcase.vue  # 📦 产品展示（玻璃展柜、粒子、Bloom）
+│   │   └── OpenSea/
+│   │       ├── OpenSea.vue         # 🌊 路径 6（WebGPU 海洋，TSL 节点着色器）
+│   │       └── fish/               # 鱼群系统
+│   │           └── models          # 鱼模型
 │   │
 │   └── components/
 │       ├── ControlPanel.vue        # 右下角控制面板（性能+灯光+动画+生长+透明度）

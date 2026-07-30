@@ -19,7 +19,7 @@ interface FishModel {
 const fishModelSources: FishModelSource[] = [
   {
     key: 'cartoon',
-    url: new URL('./cartoon.glb', import.meta.url),
+    url: new URL('./models/cartoon.glb', import.meta.url),
     axes: new THREE.Matrix4().set(0, -1, 0, 0, -1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1),
   },
 ]
