@@ -674,7 +674,7 @@ async function init() {
     controls.minPolarAngle = 0.15
     controls.maxPolarAngle = Math.PI * 0.495
     controls.target.set(0, 1.5, 0)
-    controls.autoRotate = true
+    controls.autoRotate = driftEnabled.value
     controls.autoRotateSpeed = 0.25
     controls.update()
 
@@ -791,7 +791,12 @@ onBeforeUnmount(() => {
       <div class="control">
         <div class="control-head">
           <label for="sea-range" data-i18n="panel.seaState">{{ t('panel.seaState') }}</label>
-          <span class="control-value">{{ seaValue }}</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span class="control-value">{{ seaValue }}</span>
+            <button class="pill lang-pill" style="font-size:9px;min-width:30px;padding:6px 4px;"
+              :class="{ active: driftEnabled }"
+              @click="toggleDrift">{{ driftEnabled ? 'ON' : 'OFF' }}</button>
+          </span>
         </div>
         <input id="sea-range" type="range" min="0" max="100" value="45" step="1"
           @input="onSeaStateChange" :aria-label="t('panel.seaState')" />
@@ -1020,10 +1025,9 @@ onBeforeUnmount(() => {
         <div class="help-block">
           <div class="help-head">⚙️ 左上面板功能</div>
           <div class="help-text">
-            · 海况滑块 — 控制波浪强度<br>
-            · 时段滑块 / 实时同步 — 控制太阳位置 (日出→正午→黄昏→夜晚)<br>
-            · 鱼缸大小 20×20 ~ 100×100<br>
-            · 边框显隐 ON/OFF<br>
+            · 海况滑块 — 控制波浪强度 · 自动旋转 ON/OFF<br>
+            · 时段滑块 — 控制太阳位置 · 实时同步 ON/OFF<br>
+            · 鱼缸大小 — 控制鱼群活动范围 · 边框显隐 ON/OFF<br>
             · 沙丁鱼 / 锦鲤数量 0~1000<br>
             · 感知范围 · 速度 · 分离强度 · 避障强度 · 转向速度 · 顶部回避
           </div>
