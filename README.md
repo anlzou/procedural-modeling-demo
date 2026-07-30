@@ -278,6 +278,16 @@ procedural-modeling-demo/
 
 > 三个体积较大的 Three.js 后端（`three` / `three/webgpu` / `three/addons`）被提取为独立 chunk，不会重复打包到每个页面中。浏览器缓存一次后，所有页面共享。
 
+### 3D 模型压缩
+
+鱼群模型采用 Draco 压缩 + 纹理降采样，显著减少模型加载体积：
+
+| 模型 | 压缩前 | 压缩后 | 节省 | 技术 |
+|------|--------|--------|------|------|
+| `cartoon.glb` | **4.21 MB** | **323 KB** | **92%** | 纹理 256² + Draco (`KHR_draco_mesh_compression`) |
+
+Draco 解码器（WebAssembly）部署在 `public/draco/` 目录，由 `DRACOLoader` 在运行时自动加载解码，源码中无需显式引用。解码文件仅在首次加载模型时下载，浏览器缓存后可复用。
+
 ---
 
 ## 🚀 运行方式
