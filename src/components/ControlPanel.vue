@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, inject, onMounted, onBeforeUnmount } from 'vue'
 
 const expanded = ref(false)
 const pinned = ref(false)
@@ -9,6 +9,11 @@ const playing = ref(true)
 const speed = ref(1)
 
 const emit = defineEmits(['togglePlay', 'updateSpeed', 'updateLight', 'toggleGrowth', 'updateGrowthSpeed', 'updateCardBrightness', 'updateGlassBrightness', 'updateCardColor', 'updateGlassColor', 'resetLights', 'resetCamera', 'toggleFishCam', 'toggleUltraHd'])
+
+// Wallpaper mode (injected from App.vue, universal)
+const wallpaperMode = inject('wallpaperMode', ref(false))
+const panelsRevealed = inject('panelsRevealed', ref(true))
+const toggleWallpaper = inject('toggleWallpaper', () => {})
 
 // 光源控制
 const lightVisible = ref([])
@@ -81,6 +86,7 @@ const props = defineProps({
   qualityLabel: { type: String, default: '' },
   fishCamActive: { type: Boolean, default: false },
   ultraHd: { type: Boolean, default: false },
+  showCameraControls: { type: Boolean, default: false },
 })
 
 // Initialize light visibility from prop
@@ -107,13 +113,20 @@ watch(() => props.lightSources, (val) => {
       <div v-show="expanded" ref="panelRef" class="control-panel">
         <div class="panel-header">
           <h3>⚙ 控制面板</h3>
-          <button class="pin-btn" :class="{ active: pinned }" @click="pinned = !pinned" :title="pinned ? '取消置顶' : '置顶面板'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="6" r="2.5"/>
-              <line x1="12" y1="8.5" x2="12" y2="15"/>
-              <path d="M9 14l3 5 3-5"/>
-            </svg>
-          </button>
+          <div style="display:flex; gap:4px;">
+            <button class="pin-btn" :class="{ active: wallpaperMode }" @click="toggleWallpaper()" :title="wallpaperMode ? '退出壁纸模式' : '壁纸模式'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            </button>
+            <button class="pin-btn" :class="{ active: pinned }" @click="pinned = !pinned" :title="pinned ? '取消置顶' : '置顶面板'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="6" r="2.5"/>
+                <line x1="12" y1="8.5" x2="12" y2="15"/>
+                <path d="M9 14l3 5 3-5"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="control-panel-scroll">
@@ -272,8 +285,8 @@ watch(() => props.lightSources, (val) => {
             </div>
           </div>
 
-          <!-- 相机控制 -->
-          <div class="section">
+          <!-- 相机控制 (仅 OpenSea 页面显示) -->
+          <div v-if="showCameraControls" class="section">
             <div style="display:flex; gap:0.35rem;">
               <div style="flex:1; display:flex; align-items:center; gap:6px;">
                 <span class="quality-badge" :class="{ uhd: qualityBadge === 'ULTRA HD' || qualityBadge === '超高清' }">{{ qualityBadge || '—' }}</span>

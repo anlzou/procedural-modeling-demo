@@ -982,7 +982,7 @@ onBeforeUnmount(() => {
     <!-- ControlPanel with transparency slider -->
     <ControlPanel :fps="Number(fpsDisplay)" :showAnimation="true"
       :qualityBadge="qualityBadge" :qualityLabel="qualityLabel"
-      :fishCamActive="fishCamActive" :ultraHd="PERF?.ultraHd ?? false"
+      :fishCamActive="fishCamActive" :ultraHd="PERF?.ultraHd ?? false" :showCameraControls="true"
       @resetCamera="onResetCamera" @toggleFishCam="onToggleFishCam"
       @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @toggleUltraHd="toggleUltraHd" />
   </div>
