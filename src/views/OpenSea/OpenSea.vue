@@ -13,6 +13,7 @@ import InfoPanel from '../../components/InfoPanel.vue'
 import { t as i18nT } from '../../utils/oceanI18n.js'
 import { createPerfEngine } from '../../utils/oceanPerf.js'
 import { createFishSystem } from './fish/index.js'
+import { createWeatherSystem } from './weather/weather-system.js'
 const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
@@ -40,6 +41,11 @@ const simPaused = ref(false)
 const simSpeed = ref(1)
 const aquariumSize = ref(20)
 const showBoundary = ref(false)
+
+// Weather system state
+const weatherSystem = ref(null)
+const weatherType = ref(0) // 0=clear, 1=rain, 2=snow, 3=storm
+const weatherLabels = ['☀️ Clear', '🌧️ Rain', '❄️ Snow', '🌪️ Storm']
 
 // Fish slider display values (reactive mirrors for template binding)
 const fishDisplay = ref({
@@ -541,6 +547,13 @@ function toggleBoundary() {
   if (fishSystem.value) fishSystem.value.toggleBoundary(showBoundary.value)
 }
 
+function onWeatherChange(e) {
+  const val = Number(e.target.value)
+  weatherType.value = val
+  const types = ['clear', 'rain', 'snow', 'storm']
+  weatherSystem.value?.setWeather(types[val])
+}
+
 /* ---------------------------------------------------------------------------
    Fish controls handlers
    --------------------------------------------------------------------------- */
@@ -590,6 +603,8 @@ async function frame() {
       fishSystem.value.update(dt)
       // Sync fish directional light with procedural sun
       fishSystem.value.updateLights(uSunDir.value, uSunColor.value)
+      // Update weather particles & ripples
+      weatherSystem.value?.update(dt)
       fishCamActive.value = fishSystem.value.cameraRig.active
       if (fishCamActive.value) {
         controls.enabled = false
@@ -705,6 +720,9 @@ async function init() {
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
+    // Initialize weather system
+    weatherSystem.value = createWeatherSystem(scene)
+
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
 
@@ -748,6 +766,7 @@ onBeforeUnmount(() => {
     renderer.setAnimationLoop(null)
   }
   fishSystem.value?.dispose()
+  weatherSystem.value?.dispose()
   if (onSpaceKey) window.removeEventListener('keydown', onSpaceKey)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -816,6 +835,17 @@ onBeforeUnmount(() => {
         <input id="time-range" type="range" min="0" max="100" step="1"
           :value="timeSliderValue" @input="onTimeOfDayChange"
           :aria-label="t('panel.timeOfDay')" />
+      </div>
+
+      <!-- Weather -->
+      <div class="control">
+        <div class="control-head">
+          <label for="weather-range" data-i18n="panel.weather">{{ t('panel.weather') }}</label>
+          <span class="control-value">{{ weatherLabels[weatherType] }}</span>
+        </div>
+        <input id="weather-range" type="range" min="0" max="3" step="1"
+          :value="weatherType" @input="onWeatherChange"
+          :aria-label="t('panel.weather')" />
       </div>
 
       <!-- Aquarium Size & Show Boundary -->
@@ -994,7 +1024,11 @@ onBeforeUnmount(() => {
 
         <div class="help-block">
           <div class="help-head">🌊 海洋</div>
-          <div class="help-text">五方向 Gerstner 涌浪叠加 · FBM 微表面细节 · 光谱散射天空 · 程序化云层 · 月亮圆盘 · Fresnel 反射 · Bloom 泛光 · 波峰泡沫 · 太阳闪烁</div>
+          <div class="help-text">
+            · 🌊 程序化波浪 — 五方向 Gerstner 涌浪叠加<br>
+            · ☀️ 动态天空 — 光谱散射 + 程序化云层<br>
+            · 🐟 Boids 鱼群 — 沙丁鱼 + 锦鲤独立集群<br>
+            · 🌧️ 天气系统 — 下雨 / 下雪 / 风暴（雨滴水面波纹）</div>
         </div>
 
         <div class="help-block">
@@ -1029,7 +1063,8 @@ onBeforeUnmount(() => {
             · 时段滑块 — 控制太阳位置 · 实时同步 ON/OFF<br>
             · 鱼缸大小 — 控制鱼群活动范围 · 边框显隐 ON/OFF<br>
             · 沙丁鱼 / 锦鲤数量 0~1000<br>
-            · 感知范围 · 速度 · 分离强度 · 避障强度 · 转向速度 · 顶部回避
+            · 感知范围 · 速度 · 分离强度 · 避障强度 · 转向速度 · 顶部回避<br>
+            · 天气滑块 — 切换晴朗 / 下雨 / 下雪 / 风暴
           </div>
         </div>
 

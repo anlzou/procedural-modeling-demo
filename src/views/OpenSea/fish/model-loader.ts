@@ -99,7 +99,7 @@ async function _load(): Promise<void> {
 
 /** Load a single GLB with XHR progress tracking */
 const dracoLoader = new DRACOLoader()
-dracoLoader.setDecoderPath('/draco/')
+dracoLoader.setDecoderPath(`${import.meta.env.BASE_URL}draco/`)
 
 function loadWithProgress(url: string): Promise<any> {
   return new Promise((resolve, reject) => {

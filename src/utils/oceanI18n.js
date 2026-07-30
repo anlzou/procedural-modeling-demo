@@ -9,6 +9,7 @@ export const L10N = {
     'panel.timeOfDay': 'Time of Day',
 
     'panel.hint': 'DRAG TO ORBIT — SCROLL TO ZOOM',
+    'panel.weather': 'Weather',
     'time.dawn': 'DAWN',
     'time.dusk': 'DUSK',
     'time.midday': 'MIDDAY',
@@ -51,6 +52,7 @@ export const L10N = {
     'panel.timeOfDay': '时段',
 
     'panel.hint': '拖拽旋转 — 滚轮缩放',
+    'panel.weather': '天气',
     'time.dawn': '晨曦',
     'time.dusk': '黄昏',
     'time.midday': '正午',
