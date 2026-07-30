@@ -33,6 +33,7 @@ const driftEnabled = ref(true)
 const fishSystem = ref(null)
 const fishCamActive = ref(false)
 const fishLoadError = ref('')
+const fishLoadProgress = ref(0)
 const simPaused = ref(false)
 const simSpeed = ref(1)
 const aquariumSize = ref(20)
@@ -598,6 +599,13 @@ async function frame() {
     }
   }
 
+  // Track fish model download progress
+  if (fishSystem.value && !fishSystem.value.ready) {
+    fishLoadProgress.value = fishSystem.value.loadProgress
+  } else if (fishSystem.value?.ready && fishLoadProgress.value < 1) {
+    fishLoadProgress.value = 1
+  }
+
   PERF.tick(dt)
   controls.update()
   await postProcessing.renderAsync()
@@ -950,6 +958,12 @@ onBeforeUnmount(() => {
 
       <!-- Hint -->
       <div class="hint-content" aria-hidden="true">{{ t('panel.hint') }} · {{ t('fish.cameraToggle') }}</div>
+
+      <!-- Fish model download progress -->
+      <div v-if="fishLoadProgress < 1 && fishSystem" class="fish-progress-wrap">
+        <div class="fish-progress-bar" :style="{ width: Math.max(fishLoadProgress * 100, 2) + '%' }"></div>
+        <span class="fish-progress-label">{{ Math.round(fishLoadProgress * 100) }}%</span>
+      </div>
     </InfoPanel>
 
     <!-- ControlPanel with transparency slider -->
@@ -1253,6 +1267,32 @@ onBeforeUnmount(() => {
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(12px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.fish-progress-wrap {
+  margin-top: 16px;
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: visible;
+}
+
+.fish-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #8fe9e4, #5bc0be);
+  transition: width 0.25s ease;
+}
+
+.fish-progress-label {
+  position: absolute;
+  right: 0;
+  top: -14px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 @media (max-width: 768px) {

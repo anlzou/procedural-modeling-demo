@@ -6,7 +6,7 @@ import {
   disposeFishMesh,
   updateFishInstances,
 } from './instanced-school-renderer.js'
-import { loadFishModel, isReady, getLoadError, createFishModelInstanceByKey } from './model-loader.js'
+import { loadFishModel, isReady, getLoadError, getLoadProgress, createFishModelInstanceByKey } from './model-loader.js'
 import { createCameraRig } from './camera-rig.js'
 import { createDefaultSettings, fishConfig, obstacles, virtualAquarium, setAquariumSize } from './config.js'
 import type { FishState, SimulationSettings } from './types.js'
@@ -42,6 +42,7 @@ export interface FishSystem {
   controls: FishControls
   ready: boolean
   loadError: string | null
+  loadProgress: number
   getRandomFish(): FishState | null
   update(dt: number): void
   updateLights(sunDir: THREE.Vector3, sunColor: THREE.Color): void
@@ -49,6 +50,9 @@ export interface FishSystem {
   toggleBoundary(show: boolean): void
   resize(width: number, height: number): void
   dispose(): void
+  onControlChange(): void
+  onSardineCountChange(value: number): void
+  onKoiCountChange(value: number): void
 }
 
 export function createFishSystem(options: FishSystemOptions): FishSystem {
@@ -86,7 +90,7 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
   const ambientLight = new THREE.AmbientLight(0x446688, 0.6)
   const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x1b3024, 0.8)
   const fishSunLight = new THREE.DirectionalLight(0xffeedd, 2.2)
-  fishSunLight.position.set(0.8, 15, 0.6)
+  ;(fishSunLight as any).position.set(0.8, 15, 0.6)
   fishSunLight.castShadow = false
   scene.add(ambientLight)
   scene.add(hemiLight)
@@ -177,13 +181,15 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
   function rebuildBoundary() {
     // Clear old boundary
     while (boundaryGroup.children.length) {
-      const child = boundaryGroup.children[0]
-      child.geometry?.dispose()
-      if (child.material) {
-        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose())
-        else child.material.dispose()
+      const child: THREE.Object3D = boundaryGroup.children[0]
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.LineSegments || child instanceof THREE.Points) {
+        (child as any).geometry?.dispose()
+        if ((child as any).material) {
+          if (Array.isArray((child as any).material)) (child as any).material.forEach((m: THREE.Material) => m.dispose())
+          else (child as any).material.dispose()
+        }
       }
-      boundaryGroup.remove(child)
+      ;(boundaryGroup as any).remove(child)
     }
 
     const hs = virtualAquarium.halfSize
@@ -196,8 +202,8 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
       opacity: 0.15,
     })
     const wireframe = new THREE.LineSegments(edges, lineMat)
-    wireframe.position.copy(c)
-    boundaryGroup.add(wireframe)
+    ;(wireframe as any).position.copy(c)
+    ;(boundaryGroup as any).add(wireframe)
 
     const pillarMat = new THREE.LineBasicMaterial({
       color: 0x8fe9e4,
@@ -216,7 +222,7 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
         new THREE.Vector3(sx * hs.x, topY, sz * hs.z),
       ])
       const pillar = new THREE.Line(pillarGeo, pillarMat)
-      boundaryGroup.add(pillar)
+      ;(boundaryGroup as any).add(pillar)
     }
   }
 
@@ -284,7 +290,7 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
   }
 
   function updateLights(sunDir: THREE.Vector3, sunColor: THREE.Color) {
-    fishSunLight.position.copy(sunDir).multiplyScalar(80)
+    ;(fishSunLight as any).position.copy(sunDir).multiplyScalar(80)
     fishSunLight.color.copy(sunColor)
     const intensity = Math.max(sunColor.r, sunColor.g, sunColor.b)
     fishSunLight.intensity = intensity * 0.8
@@ -306,6 +312,7 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
   return {
     get ready() { return ready },
     get loadError() { return getLoadError() },
+    get loadProgress() { return getLoadProgress() },
     cameraRig,
     controls,
     getRandomFish,

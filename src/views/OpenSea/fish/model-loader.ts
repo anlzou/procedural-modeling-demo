@@ -30,6 +30,7 @@ const tmpSize = new THREE.Vector3()
 let fishModels: FishModel[] = []
 let loadDone = false
 let loadError: string | null = null
+let loadProgress = 0
 let loadPromise: Promise<void> | null = null
 
 /** Returns true once GLB models have finished loading */
@@ -40,6 +41,11 @@ export function isReady(): boolean {
 /** Returns the last load error message, or null if loading succeeded */
 export function getLoadError(): string | null {
   return loadError
+}
+
+/** Returns download progress 0–1, or 0 if not yet started */
+export function getLoadProgress(): number {
+  return loadProgress
 }
 
 export async function loadFishModel(): Promise<void> {
@@ -54,9 +60,9 @@ async function _load(): Promise<void> {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     loadError = null
-    const loader = new GLTFLoader()
+    loadProgress = 0
     const results = await Promise.allSettled(
-      fishModelSources.map((s) => loader.loadAsync(s.url.href)),
+      fishModelSources.map((s) => loadWithProgress(s.url.href)),
     )
     const loaded: FishModel[] = []
     for (let i = 0; i < results.length; i += 1) {
@@ -83,6 +89,23 @@ async function _load(): Promise<void> {
   loadError = '鱼模型文件下载失败，请检查网络连接后刷新页面重试'
   loadDone = true
   console.error('All fish models failed to load after 5 retries.')
+}
+
+/** Load a single GLB with XHR progress tracking */
+function loadWithProgress(url: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+    loader.load(
+      url,
+      (gltf: any) => resolve(gltf),
+      (xhr: ProgressEvent) => {
+        if (xhr.total > 0) {
+          loadProgress = xhr.loaded / xhr.total
+        }
+      },
+      (err: any) => reject(err),
+    )
+  })
 }
 
 function findPrimaryMesh(root: THREE.Object3D): THREE.Mesh | null {
