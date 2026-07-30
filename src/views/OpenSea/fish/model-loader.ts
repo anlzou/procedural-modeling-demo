@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { fishConfig } from './config.js'
 import type { FishModelInstance } from './types.js'
 
@@ -97,9 +98,13 @@ async function _load(): Promise<void> {
 }
 
 /** Load a single GLB with XHR progress tracking */
+const dracoLoader = new DRACOLoader()
+dracoLoader.setDecoderPath('/draco/')
+
 function loadWithProgress(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const loader = new GLTFLoader()
+    loader.setDRACOLoader(dracoLoader)
     loader.load(
       url,
       (gltf: any) => resolve(gltf),
