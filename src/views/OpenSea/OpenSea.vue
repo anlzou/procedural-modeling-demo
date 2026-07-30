@@ -822,13 +822,13 @@ onBeforeUnmount(() => {
       <div class="control">
         <div class="control-head" style="margin-top:12px;">
           <span style="color:#8fe9e4;letter-spacing:0.1em;">{{ t('fish.title') }}</span>
+          <span v-if="fishModelKeys.length" class="control-value" style="font-size:8px;opacity:0.5;">{{ fishModelKeys.join(' · ') }}</span>
         </div>
       </div>
 
       <!-- Fish model download progress -->
-      <div v-if="fishLoadProgress < 1 && fishSystem" class="fish-progress-wrap">
+      <div v-if="fishLoadProgress < 1" class="fish-progress-wrap">
         <div class="fish-progress-head">
-          <span class="fish-progress-model">{{ fishModelKeys.join(' · ') }}</span>
           <span class="fish-progress-pct">{{ Math.round(fishLoadProgress * 100) }}%</span>
         </div>
         <div class="fish-progress-track">
@@ -842,6 +842,7 @@ onBeforeUnmount(() => {
           <span class="control-value">{{ fishDisplay.sardineCount }}</span>
         </div>
         <input id="sardine-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.sardineCount"
+          :disabled="!fishSystem?.value?.ready"
           @input="onFishControl('sardineCount', $event)" />
       </div>
 
@@ -851,6 +852,7 @@ onBeforeUnmount(() => {
           <span class="control-value">{{ fishDisplay.koiCount }}</span>
         </div>
         <input id="koi-count" type="range" :min="0" :max="1000" step="1" :value="fishDisplay.koiCount"
+          :disabled="!fishSystem?.value?.ready"
           @input="onFishControl('koiCount', $event)" />
       </div>
 
@@ -1116,6 +1118,11 @@ onBeforeUnmount(() => {
 
 .control :deep(input[type="range"]::-moz-range-thumb:hover) {
   transform: scale(1.25);
+}
+
+.control :deep(input[type="range"]:disabled) {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .quality-bar {
