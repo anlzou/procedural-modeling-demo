@@ -977,6 +977,65 @@ onBeforeUnmount(() => {
 
       <!-- Hint -->
       <div class="hint-content" aria-hidden="true">{{ t('panel.hint') }} · {{ t('fish.cameraToggle') }}</div>
+
+      <!-- Help / Instructions -->
+      <div class="help-section">
+        <div class="help-title">📖 功能说明</div>
+
+        <div class="help-block">
+          <div class="help-head">🌊 海洋</div>
+          <div class="help-text">五方向 Gerstner 涌浪叠加 · FBM 微表面细节 · 光谱散射天空 · 程序化云层 · 月亮圆盘 · Fresnel 反射 · Bloom 泛光 · 波峰泡沫 · 太阳闪烁</div>
+        </div>
+
+        <div class="help-block">
+          <div class="help-head">🐟 鱼群</div>
+          <div class="help-text">Boids 群体行为模拟：沙丁鱼（白色）与锦鲤（红白大正三色）独立集群 · 鱼体曲线变形 + 尾部摆动 · 避障射线检测 · 边界回避 · 空间哈希网格加速 · 3D 鱼模型（cartoon.glb）</div>
+        </div>
+
+        <div class="help-block">
+          <div class="help-head">🎮 操作方式 — PC</div>
+          <div class="help-text">
+            · 拖拽旋转视角 (鼠标左键)<br>
+            · Ctrl + 鼠标左键 — 平移相机位置<br>
+            · 滚轮缩放<br>
+            · 空格键 — 切换鱼眼相机 (随机跟随一条鱼)<br>
+            · Esc / Q — 退出壁纸模式
+          </div>
+        </div>
+
+        <div class="help-block">
+          <div class="help-head">📱 操作方式 — 移动端</div>
+          <div class="help-text">
+            · 单指拖拽旋转视角<br>
+            · 双指拖拽 — 平移相机位置<br>
+            · 双指捏合缩放
+          </div>
+        </div>
+
+        <div class="help-block">
+          <div class="help-head">⚙️ 左上面板功能</div>
+          <div class="help-text">
+            · 海况滑块 — 控制波浪强度<br>
+            · 时段滑块 / 实时同步 — 控制太阳位置 (日出→正午→黄昏→夜晚)<br>
+            · 鱼缸大小 20×20 ~ 100×100<br>
+            · 边框显隐 ON/OFF<br>
+            · 沙丁鱼 / 锦鲤数量 0~1000<br>
+            · 感知范围 · 速度 · 分离强度 · 避障强度 · 转向速度 · 顶部回避
+          </div>
+        </div>
+
+        <div class="help-block">
+          <div class="help-head">🔧 右下面板功能</div>
+          <div class="help-text">
+            · 性能监控 (FPS / 内存 / 对象数)<br>
+            · 动画 播放/暂停 + 速度 0~3x<br>
+            · 画质信息 [自适应/超高清] + 超高清切换<br>
+            · 重置相机 · 鱼眼相机<br>
+            · 壁纸模式 (隐藏所有 UI)<br>
+            · 面板透明度
+          </div>
+        </div>
+      </div>
     </InfoPanel>
 
     <!-- ControlPanel with transparency slider -->
@@ -1262,6 +1321,41 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   color: rgba(255, 255, 255, 0.32);
   text-align: center;
+}
+
+/* Help section */
+.help-section {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.help-title {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #8fe9e4;
+  margin-bottom: 14px;
+}
+
+.help-block {
+  margin-bottom: 12px;
+}
+
+.help-head {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 4px;
+}
+
+.help-text {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 8.5px;
+  line-height: 1.65;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .error-toast {
