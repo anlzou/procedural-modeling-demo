@@ -133,72 +133,98 @@ function createFishModelFromGltf(gltf: any, src: FishModelSource): FishModel {
 }
 
 /* ================================================================
-   Koi — generated texture variant derived from cartoon geometry
+   Koi — 基于 cartoon 几何体，烘焙白底红纹顶点色（保留原贴图含眼睛）
    ================================================================ */
 
-let koiTexture: THREE.CanvasTexture | null = null
+/**
+ * 生成锦鲤顶点色：白底 + 三段红斑（大正三色）+ 背部淡金色 + 头部留白。
+ * 同时轻微重塑体形（更圆润的腹部、稍短的身体），接近真实锦鲤。
+ *
+ * 本几何体半长 = fishConfig.length*0.25 = 0.4，故所有位置常量乘 k=0.5 缩放。
+ */
+function createKoiGeometry(sourceGeometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const geometry = sourceGeometry.clone()
+  const position = geometry.getAttribute('position')
+  const count = position.count
+  const colors = new Float32Array(count * 3)
+  const tmpVertex = new THREE.Vector3()
+  const white = new THREE.Color(0xfff0dc)
+  const red = new THREE.Color(0xd61f16)
+  const gold = new THREE.Color(0xf4b24a)
+  const tmpColor = new THREE.Color()
 
-function getKoiTexture(): THREE.CanvasTexture {
-  if (koiTexture) return koiTexture
-  const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
-  const ctx = canvas.getContext('2d')!
+  const k = 0.5 // 0.4 / 0.8，适配本几何体尺寸
 
-  // White base
-  ctx.fillStyle = '#fff0dc'
-  ctx.fillRect(0, 0, 256, 256)
+  for (let i = 0; i < count; i += 1) {
+    tmpVertex.fromBufferAttribute(position, i)
 
-  // Three irregular red patches (Taisho Sanshoku 大正三色)
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0)'
+    // 头部区域保留白色（含原贴图的眼睛）
+    const headKeep = THREE.MathUtils.smoothstep(
+      tmpVertex.y,
+      fishConfig.length * 0.2 * k,
+      fishConfig.length * 0.42 * k,
+    )
+    const bodyProgress = THREE.MathUtils.clamp(
+      1 - Math.abs(tmpVertex.y) / (fishConfig.length * 0.5 * k),
+      0,
+      1,
+    )
 
-  // Patch A — shoulder
-  ctx.beginPath()
-  ctx.ellipse(120, 80, 55, 40, 0.2, 0, Math.PI * 2)
-  ctx.fillStyle = '#d61f16'
-  ctx.fill()
+    // 体形重塑：腹部更圆、身体略短
+    const belly = 1.12 + bodyProgress * 0.46
+    const height = 1.04 + bodyProgress * 0.26
+    const bodyLen = 0.9
+    const bodyBlend = 1 - headKeep
+    position.setXYZ(
+      i,
+      THREE.MathUtils.lerp(tmpVertex.x, tmpVertex.x * belly, bodyBlend),
+      THREE.MathUtils.lerp(tmpVertex.y, tmpVertex.y * bodyLen, bodyBlend),
+      THREE.MathUtils.lerp(tmpVertex.z, tmpVertex.z * height, bodyBlend),
+    )
 
-  // Patch B — mid-body
-  ctx.beginPath()
-  ctx.ellipse(90, 140, 45, 35, -0.15, 0, Math.PI * 2)
-  ctx.fillStyle = '#d61f16'
-  ctx.fill()
+    // 三段红纹（大正三色）
+    const patchA = smoothPatch(tmpVertex.x, tmpVertex.y, 0.02 * k, 0.36 * k, 0.34 * k)
+    const patchB = smoothPatch(tmpVertex.x, tmpVertex.y, -0.1 * k, -0.02 * k, 0.3 * k)
+    const patchC = smoothPatch(tmpVertex.x, tmpVertex.y, 0.08 * k, -0.36 * k, 0.25 * k)
+    const patch = Math.max(patchA, patchB, patchC)
 
-  // Patch C — tail
-  ctx.beginPath()
-  ctx.ellipse(140, 190, 35, 28, 0.3, 0, Math.PI * 2)
-  ctx.fillStyle = '#cc1a12'
-  ctx.fill()
+    // 背部淡金
+    const dorsal = THREE.MathUtils.clamp((tmpVertex.z + 0.28 * k) / (0.74 * k), 0, 1)
 
-  // Dark accent edges on patches
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.shadowBlur = 12
+    tmpColor.copy(white).lerp(gold, dorsal * 0.22).lerp(red, patch)
+    tmpColor.lerp(white, headKeep)
+    colors[i * 3] = tmpColor.r
+    colors[i * 3 + 1] = tmpColor.g
+    colors[i * 3 + 2] = tmpColor.b
+  }
 
-  ctx.restore()
+  position.needsUpdate = true
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.computeVertexNormals()
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
+  return geometry
+}
 
-  // Subtle dorsal warm gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, 256)
-  grad.addColorStop(0, 'rgba(244, 178, 74, 0.18)')
-  grad.addColorStop(0.5, 'rgba(244, 178, 74, 0)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, 256, 256)
+/** 平滑红纹补丁：中心 (cx,cy)，半径 r，边缘柔和过渡 */
+function smoothPatch(x: number, y: number, centerX: number, centerY: number, radius: number): number {
+  const distance = Math.hypot(x - centerX, y - centerY)
+  return 1 - THREE.MathUtils.smoothstep(distance, radius * 0.58, radius)
+}
 
-  koiTexture = new THREE.CanvasTexture(canvas)
-  koiTexture.wrapS = THREE.RepeatWrapping
-  koiTexture.wrapT = THREE.RepeatWrapping
-  koiTexture.repeat.set(1, 0.6)
-  koiTexture.offset.set(0, 0.2)
-  return koiTexture
+/** 锦鲤材质：保留 cartoon 原贴图（含眼睛），叠加顶点色 */
+function createKoiMaterial(baseMaterial: THREE.Material): THREE.Material {
+  const material = cloneFishMaterial(baseMaterial) as THREE.MeshStandardMaterial
+  material.color.setHex(0xffffff)
+  material.vertexColors = true
+  material.needsUpdate = true
+  return material
 }
 
 function createKoiModelFromBase(base: FishModel): FishModel {
-  const geo = base.geometry.clone()
-  const mat = cloneFishMaterial(base.material) as THREE.MeshStandardMaterial
-  mat.color.setHex(0xfff0dc)
-  mat.map = getKoiTexture()
-  mat.needsUpdate = true
-  return { key: 'koi', geometry: geo, material: mat, renderScale: 1.15 }
+  const geometry = createKoiGeometry(base.geometry)
+  const material = createKoiMaterial(base.material)
+  return { key: 'koi', geometry, material, renderScale: 1.15 }
 }
 
 /* ================================================================
