@@ -103,6 +103,7 @@ const uDeepColor = uniform(new THREE.Color(0.015, 0.09, 0.11))
 const uShallowColor = uniform(new THREE.Color(0.06, 0.32, 0.36))
 const uFbmOctaves = uniform(3)
 const uNightFactor = uniform(0.0)
+const uLightning = uniform(0.0)
 
 /* ---------------------------------------------------------------------------
    Waves — five directional Gerstner components
@@ -248,6 +249,9 @@ const skyDomeColor = Fn(() => {
 
   col.addAssign(uNightFactor.mul(vec3(0.30, 0.35, 0.55).mul(moonGlow.add(moonDisc))))
 
+  // 闪电闪光：蓝白瞬间照亮天空
+  col.addAssign(uLightning.mul(vec3(0.75, 0.85, 1.0)))
+
   return vec4(col, 1.0)
 })
 
@@ -293,6 +297,10 @@ const oceanColor = Fn(() => {
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), clamp(foamMask.mul(0.85), 0.0, 1.0)))
   const camDist = distance(cameraPosition, P)
   col.assign(mix(col, uHorizonColor, smoothstep(150.0, 290.0, camDist)))
+
+  // 闪电闪光：蓝白瞬间照亮海面
+  col.addAssign(uLightning.mul(vec3(0.55, 0.65, 0.9)).mul(0.7))
+
   return vec4(col, 1.0)
 })
 
@@ -785,8 +793,8 @@ async function init() {
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
-    // Initialize weather system
-    weatherSystem.value = createWeatherSystem(scene)
+    // Initialize weather system (storm 含闪电，点亮 uLightning 闪光)
+    weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
 
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
