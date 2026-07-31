@@ -1,0 +1,42 @@
+procedural-modeling-demo
+Copyright (c) 2025-present anlzou (https://github.com/anlzou)
+
+This project is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0, see LICENSE file).
+
+Attribution
+-----------
+- Project Homepage: https://github.com/anlzou/procedural-modeling-demo
+- Fish-school module adapted from: https://github.com/SeanWong17/RippleAquarium (AGPL-3.0)
+- Boids algorithm base: https://github.com/vibe-motion/threejs-boids
+
+Third-party dependencies
+------------------------
+- Vue 3        https://vuejs.org            MIT
+- Vite         https://vitejs.dev           MIT
+- Three.js     https://threejs.org          MIT
+- Vue Router   https://router.vuejs.org     MIT
+- tween.js     https://github.com/tweenjs/tween.js  MIT
+- Draco 3D     https://google.github.io/draco/       Apache-2.0
+
+---
+
+procedural-modeling-demo
+版权所有 (c) 2025-present anlzou (https://github.com/anlzou)
+
+本项目采用 GNU Affero General Public License v3.0（AGPL-3.0，见 LICENSE 文件）。
+
+参考来源
+---------
+- 项目主页: https://github.com/anlzou/procedural-modeling-demo
+- 鱼群模拟模块改编自: https://github.com/SeanWong17/RippleAquarium (AGPL-3.0)
+- Boids 算法基础参考: https://github.com/vibe-motion/threejs-boids
+
+第三方依赖
+-----------
+- Vue 3        https://vuejs.org            MIT
+- Vite         https://vitejs.dev           MIT
+- Three.js     https://threejs.org          MIT
+- Vue Router   https://router.vuejs.org     MIT
+- tween.js     https://github.com/tweenjs/tween.js  MIT
+- Draco 3D     https://google.github.io/draco/       Apache-2.0

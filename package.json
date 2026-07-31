@@ -1,8 +1,15 @@
 {
-  "name": "three-paths-demo",
-  "private": true,
-  "version": "0.0.0",
+  "name": "procedural-modeling-demo",
+  "private": false,
+  "version": "1.0.0",
   "type": "module",
+  "license": "AGPL-3.0",
+  "author": "anlzou (https://github.com/anlzou)",
+  "homepage": "https://github.com/anlzou/procedural-modeling-demo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anlzou/procedural-modeling-demo.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

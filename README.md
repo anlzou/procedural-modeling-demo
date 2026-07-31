@@ -362,6 +362,14 @@ pnpm preview
 2. 如果你通过网络（如网站）向用户提供本项目的功能，必须允许用户下载完整的对应源代码。
 3. 上述鱼群模拟模块的修改版本同样受 AGPL-3.0 约束。
 
-除鱼群模拟模块外，本项目其余部分采用 **MIT License**（详见 `LICENSE` 文件，如存在）。
+本项目整体采用 **GNU Affero General Public License v3.0 (AGPL-3.0)**（详见 [LICENSE](LICENSE)），版权归 **anlzou**（[https://github.com/anlzou](https://github.com/anlzou)）所有，项目主页：[https://github.com/anlzou/procedural-modeling-demo](https://github.com/anlzou/procedural-modeling-demo)。
 
-> 以上声明仅适用于从 RippleAquarium 改编的代码。如果你对 AGPL 条款有疑问，或需要以不同条款使用该模块，请联系原作者。
+根据 AGPL-3.0 要求：
+
+1. 任何复制、修改或参考本项目的衍生作品，必须以 AGPL-3.0 发布完整源码。
+2. 如果你通过网络（如网站）向用户提供本项目功能，必须允许用户下载完整对应的源码。
+3. 必须在源代码中保留本项目来源说明（URL: `https://github.com/anlzou/procedural-modeling-demo`），并在项目主页 / README 中明确标注“参考自 / Referenced from”该地址。
+
+详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+
+> 鱼群模拟模块改编自 RippleAquarium（AGPL-3.0）。如果你对 AGPL 条款有疑问，或需要以不同条款使用该模块，请联系原作者。
