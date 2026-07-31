@@ -503,10 +503,40 @@ function toggleLang() {
 /* ---------------------------------------------------------------------------
    Camera reset
    --------------------------------------------------------------------------- */
+
+/** 鱼缸水平中心（虚拟鱼缸 XZ 中心为原点） */
+const AQUARIUM_CENTER = new THREE.Vector3(0, 1.5, 0)
+const AQUARIUM_VIEW_DIST = 18
+
+/**
+ * 计算重置/初始相机位姿：
+ * 相机放在鱼缸中心的反方向、沿海平面高度，使面朝太阳（白天）/月亮（夜晚）
+ * 水平方位时，鱼缸中心恰好在前方视野中，可环绕观看。
+ */
+function computeResetPose() {
+  const sunDir = uSunDir.value.clone()
+  // 月亮大致在太阳对侧（与天空着色器一致，略上倾 0.15）
+  const moonDir = sunDir.clone().negate()
+  moonDir.y += 0.15
+  moonDir.normalize()
+  // 白天 0 → 太阳方向，夜晚 1 → 月亮方向，按夜晚因子平滑过渡
+  const dir = sunDir.lerp(moonDir, uNightFactor.value)
+  dir.y = 0 // 只保留海平面水平方向
+  if (dir.lengthSq() < 0.000001) dir.set(0, 0, -1)
+  dir.normalize()
+
+  // 相机位于鱼缸中心的反方向（-dir × 距离），海平面高度
+  const pos = AQUARIUM_CENTER.clone()
+    .addScaledVector(dir, -AQUARIUM_VIEW_DIST)
+  pos.y = 5.5
+  return { pos, target: AQUARIUM_CENTER.clone() }
+}
+
 function onResetCamera() {
-  camera.position.copy(initialCamState.pos)
+  const pose = computeResetPose()
+  camera.position.copy(pose.pos)
   camera.up.set(0, 1, 0)
-  controls.target.copy(initialCamState.target)
+  controls.target.copy(pose.target)
   controls.update()
   if (fishSystem.value?.cameraRig.active) {
     fishSystem.value.cameraRig.exit()
@@ -693,10 +723,6 @@ async function init() {
     controls.autoRotateSpeed = 0.25
     controls.update()
 
-    // Save initial camera state for reset
-    initialCamState.pos.copy(camera.position)
-    initialCamState.target.copy(controls.target)
-
     // Initialize fish system
     fishSystem.value = createFishSystem({ scene, controls, aquariumSize: 20, showBoundary: false })
     fishCamActive.value = false
@@ -725,6 +751,15 @@ async function init() {
 
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
+
+    // 初始相机朝向太阳/月亮且正对鱼缸中心（可环绕观看）
+    const initialPose = computeResetPose()
+    camera.position.copy(initialPose.pos)
+    controls.target.copy(initialPose.target)
+    controls.update()
+    // 保存初始相机状态（用于重置）
+    initialCamState.pos.copy(initialPose.pos)
+    initialCamState.target.copy(initialPose.target)
 
     await renderer.init()
     lastNow = performance.now()
