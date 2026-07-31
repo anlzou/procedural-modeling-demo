@@ -319,6 +319,7 @@ let revealed = false
 let fpsAccum = 0
 let fpsCount = 0
 let onSpaceKey = null
+let onMeteorKey = null
 /** Snapshot of the camera state when the page first loads */
 const initialCamState = { pos: new THREE.Vector3(), target: new THREE.Vector3() }
 
@@ -795,6 +796,15 @@ async function init() {
     }
     window.addEventListener('keydown', onSpaceKey)
 
+    // M key → 手动触发流星（仅 Clear 晴朗夜晚，可连续触发）
+    onMeteorKey = (e) => {
+      if (e.code !== 'KeyM' || e.repeat) return
+      if (weatherType.value === 0 && uNightFactor.value > 0.55 && meteorSystem) {
+        meteorSystem.trigger()
+      }
+    }
+    window.addEventListener('keydown', onMeteorKey)
+
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
@@ -859,6 +869,7 @@ onBeforeUnmount(() => {
   weatherSystem.value?.dispose()
   meteorSystem?.dispose()
   if (onSpaceKey) window.removeEventListener('keydown', onSpaceKey)
+  if (onMeteorKey) window.removeEventListener('keydown', onMeteorKey)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   controls?.dispose()
@@ -1134,6 +1145,7 @@ onBeforeUnmount(() => {
             · Ctrl + 鼠标左键 — 平移相机位置<br>
             · 滚轮缩放<br>
             · 空格键 — 切换鱼眼相机 (随机跟随一条鱼)<br>
+            · M 键 — 手动触发流星 (晴朗夜晚，可连发)<br>
             · Esc / Q — 退出壁纸模式
           </div>
         </div>
