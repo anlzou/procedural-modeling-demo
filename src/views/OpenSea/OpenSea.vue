@@ -14,6 +14,7 @@ import { t as i18nT } from '../../utils/oceanI18n.js'
 import { createPerfEngine } from '../../utils/oceanPerf.js'
 import { createFishSystem } from './fish/index.js'
 import { createWeatherSystem } from './weather/weather-system.js'
+import { createMeteorSystem } from './weather/meteor.js'
 const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
 
 /* ---------------------------------------------------------------------------
@@ -311,6 +312,7 @@ initPerfEngine()
    Scene variables
    --------------------------------------------------------------------------- */
 let renderer, scene, camera, controls, postProcessing
+let meteorSystem = null
 let lastNow = 0
 let lastRealTimeSync = 0
 let revealed = false
@@ -682,6 +684,9 @@ async function frame() {
       fishSystem.value.updateLights(uSunDir.value, uSunColor.value)
       // Update weather particles & ripples
       weatherSystem.value?.update(dt)
+      // Clear + 夜晚 → 流星
+      const nightClear = weatherType.value === 0 && uNightFactor.value > 0.55
+      if (meteorSystem) nightClear ? meteorSystem.update(dt) : meteorSystem.reset()
       fishCamActive.value = fishSystem.value.cameraRig.active
       if (fishCamActive.value) {
         controls.enabled = false
@@ -796,6 +801,9 @@ async function init() {
     // Initialize weather system (storm 含闪电，点亮 uLightning 闪光)
     weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
 
+    // 流星（仅 Clear 晴朗夜空）
+    meteorSystem = createMeteorSystem(scene, camera)
+
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
 
@@ -849,6 +857,7 @@ onBeforeUnmount(() => {
   }
   fishSystem.value?.dispose()
   weatherSystem.value?.dispose()
+  meteorSystem?.dispose()
   if (onSpaceKey) window.removeEventListener('keydown', onSpaceKey)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
