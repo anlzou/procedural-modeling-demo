@@ -27,6 +27,7 @@ const timeLabel = ref('午后')
 const timeSliderValue = ref(55)
 const realTimeMode = ref(true)
 const seaValue = ref('0.93')
+const seaSliderValue = ref(45)
 const currentLang = ref('zh')
 const driftEnabled = ref(true)
 
@@ -44,8 +45,8 @@ const showBoundary = ref(false)
 
 // Weather system state
 const weatherSystem = ref(null)
-const weatherType = ref(0) // 0=clear, 1=rain, 2=snow, 3=storm
-const weatherLabels = ['☀️ Clear', '🌧️ Rain', '❄️ Snow', '🌪️ Storm']
+const weatherType = ref(0) // 0=clear, 1=snow, 2=rain, 3=storm
+const weatherLabels = ['☀️ Clear', '❄️ Snow', '🌧️ Rain', '🌪️ Storm']
 
 // Fish slider display values (reactive mirrors for template binding)
 const fishDisplay = ref({
@@ -472,6 +473,8 @@ function syncTimeWithSystem() {
    --------------------------------------------------------------------------- */
 function onSeaStateChange(e) {
   const val = Number(e.target.value)
+  seaSliderValue.value = val
+  targetSeaSlider = val
   uSeaUniform.value = 0.25 + (val / 100) * 1.5
   seaValue.value = uSeaUniform.value.toFixed(2)
 }
@@ -564,6 +567,7 @@ function onTogglePlay(playing) {
 
 function onUpdateSpeed(val) {
   simSpeed.value = val
+  targetSpeed = val
 }
 
 function onAquariumSizeChange(e) {
@@ -577,11 +581,33 @@ function toggleBoundary() {
   if (fishSystem.value) fishSystem.value.toggleBoundary(showBoundary.value)
 }
 
+// 风暴模式：进入拉满海况 + 2.0x 速度，离开恢复；通过 target 值在帧循环中平滑过渡
+let stormActive = false
+let stormPrevSeaSlider = 45
+let stormPrevSpeed = 1
+let targetSeaSlider = 45
+let targetSpeed = 1
+
 function onWeatherChange(e) {
   const val = Number(e.target.value)
+  const nextType = ['clear', 'snow', 'rain', 'storm'][val]
+  const isStorm = nextType === 'storm'
+
+  if (isStorm && !stormActive) {
+    // 进入风暴：保存当前值，设定目标为海况最大 + 速度 2.0x
+    stormPrevSeaSlider = seaSliderValue.value
+    stormPrevSpeed = simSpeed.value
+    targetSeaSlider = 100 // 1.75（最大）
+    targetSpeed = 2
+  } else if (!isStorm && stormActive) {
+    // 离开风暴：目标恢复为之前的值
+    targetSeaSlider = stormPrevSeaSlider
+    targetSpeed = stormPrevSpeed
+  }
+
+  stormActive = isStorm
   weatherType.value = val
-  const types = ['clear', 'rain', 'snow', 'storm']
-  weatherSystem.value?.setWeather(types[val])
+  weatherSystem.value?.setWeather(nextType)
 }
 
 /* ---------------------------------------------------------------------------
@@ -615,6 +641,19 @@ async function frame() {
   const rawDt = (now - lastNow) / 1000
   lastNow = now
   const dt = Math.min(rawDt, 0.1)
+
+  // 风暴海况平滑过渡（指数缓动，约 1s 到达目标）
+  if (Math.abs(seaSliderValue.value - targetSeaSlider) > 0.05) {
+    const seaRate = 1 - Math.exp(-3 * dt)
+    seaSliderValue.value += (targetSeaSlider - seaSliderValue.value) * seaRate
+    uSeaUniform.value = 0.25 + (seaSliderValue.value / 100) * 1.5
+    seaValue.value = uSeaUniform.value.toFixed(2)
+  }
+  // 风暴速度平滑过渡
+  if (Math.abs(simSpeed.value - targetSpeed) > 0.005) {
+    const speedRate = 1 - Math.exp(-2.5 * dt)
+    simSpeed.value += (targetSpeed - simSpeed.value) * speedRate
+  }
 
   // Sync with system clock when real-time mode is active (~1s interval)
   if (realTimeMode.value && rawDt < 0.15) {
@@ -852,7 +891,7 @@ onBeforeUnmount(() => {
               @click="toggleDrift">{{ driftEnabled ? 'ON' : 'OFF' }}</button>
           </span>
         </div>
-        <input id="sea-range" type="range" min="0" max="100" value="45" step="1"
+        <input id="sea-range" type="range" min="0" max="100" :value="seaSliderValue" step="1"
           @input="onSeaStateChange" :aria-label="t('panel.seaState')" />
       </div>
 
