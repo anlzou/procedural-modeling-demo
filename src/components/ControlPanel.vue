@@ -839,4 +839,97 @@ watch(() => props.lightSources, (val) => {
   border-color: rgba(34, 211, 238, 0.4);
   background: rgba(34, 211, 238, 0.06);
 }
+
+/* 通用插槽控件（按钮 / 滑块 / 触发按钮） */
+:deep(.controls-row) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+:deep(.light-btn) {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+:deep(.light-btn:hover) {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+:deep(.light-btn.active) {
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.4);
+}
+:deep(.slider-row) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+:deep(.slider-label) {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+:deep(.slider-value) {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+:deep(.alpha-slider) {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  cursor: pointer;
+}
+:deep(.alpha-slider::-webkit-slider-thumb) {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(130, 130, 200, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+:deep(.alpha-slider::-webkit-slider-thumb:hover) {
+  background: rgba(130, 130, 200, 0.9);
+  transform: scale(1.15);
+}
+:deep(.alpha-slider::-moz-range-thumb) {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(130, 130, 200, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+:deep(.reset-btn) {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+:deep(.reset-btn:hover) {
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.4);
+  background: rgba(34, 211, 238, 0.08);
+}
 </style>

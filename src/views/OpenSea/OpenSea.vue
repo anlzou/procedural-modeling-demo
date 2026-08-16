@@ -49,6 +49,9 @@ const weatherSystem = ref(null)
 const weatherType = ref(0) // 0=clear, 1=snow, 2=rain, 3=storm
 const weatherLabels = ['☀️ Clear', '❄️ Snow', '🌧️ Rain', '🌪️ Storm']
 
+// Meteor system state（轨迹模式配置，控制面板实时调整）
+const meteorCfg = ref({ mode: 'random', radiantBurst: 3, radiantSpread: 0.8 })
+
 // Fish slider display values (reactive mirrors for template binding)
 const fishDisplay = ref({
   sardineCount: 0, koiCount: 0, perception: 2.7,
@@ -581,6 +584,26 @@ function onUpdateSpeed(val) {
   targetSpeed = val
 }
 
+/* ---------------------------------------------------------------------------
+   Meteor control（轨迹模式配置，辐射点模式实时生效）
+   --------------------------------------------------------------------------- */
+function onMeteorMode(mode) {
+  meteorCfg.value.mode = mode
+  meteorSystem?.setConfig({ mode })
+}
+
+function onMeteorCfg(key, val) {
+  meteorCfg.value[key] = val
+  meteorSystem?.setConfig({ [key]: val })
+}
+
+/** 手动触发一场流星雨（辐射模式）/ 一颗流星（随机模式） */
+function onMeteorShower() {
+  if (weatherType.value === 0 && uNightFactor.value > 0.55 && meteorSystem) {
+    meteorSystem.trigger()
+  }
+}
+
 function onAquariumSizeChange(e) {
   const val = Number(e.target.value)
   aquariumSize.value = val
@@ -811,8 +834,8 @@ async function init() {
     // Initialize weather system (storm 含闪电，点亮 uLightning 闪光)
     weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
 
-    // 流星（仅 Clear 晴朗夜空）
-    meteorSystem = createMeteorSystem(scene, camera)
+    // 流星（仅 Clear 晴朗夜空）；传入控制面板配置（随机角 / 辐射点流星雨）
+    meteorSystem = createMeteorSystem(scene, camera, meteorCfg.value)
 
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
@@ -1190,7 +1213,33 @@ onBeforeUnmount(() => {
       :qualityBadge="qualityBadge" :qualityLabel="qualityLabel"
       :fishCamActive="fishCamActive" :ultraHd="PERF?.ultraHd ?? false" :showCameraControls="true"
       @resetCamera="onResetCamera" @toggleFishCam="onToggleFishCam"
-      @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @toggleUltraHd="toggleUltraHd" />
+      @togglePlay="onTogglePlay" @updateSpeed="onUpdateSpeed" @toggleUltraHd="toggleUltraHd">
+      <!-- 流星控制（仅 Clear 天气显示） -->
+      <template #extra>
+        <div v-if="weatherType === 0" class="section">
+          <div class="section-title">☄️ 流星</div>
+          <div class="controls-row" style="margin-bottom:0.4rem;">
+            <button class="light-btn" :class="{ active: meteorCfg.mode === 'random' }" @click="onMeteorMode('random')">随机角</button>
+            <button class="light-btn" :class="{ active: meteorCfg.mode === 'radiant' }" @click="onMeteorMode('radiant')">辐射点</button>
+          </div>
+          <template v-if="meteorCfg.mode === 'radiant'">
+            <div class="slider-row" style="margin-bottom:0.4rem;">
+              <span class="slider-label">每批数量</span>
+              <input type="range" min="1" max="6" step="1" :value="meteorCfg.radiantBurst"
+                @input="onMeteorCfg('radiantBurst', parseFloat($event.target.value))" class="alpha-slider" />
+              <span class="slider-value">{{ meteorCfg.radiantBurst }}</span>
+            </div>
+            <div class="slider-row" style="margin-bottom:0.4rem;">
+              <span class="slider-label">发散范围</span>
+              <input type="range" min="0.3" max="1.5" step="0.05" :value="meteorCfg.radiantSpread"
+                @input="onMeteorCfg('radiantSpread', parseFloat($event.target.value))" class="alpha-slider" />
+              <span class="slider-value">{{ meteorCfg.radiantSpread.toFixed(2) }}</span>
+            </div>
+          </template>
+          <button class="reset-btn" style="margin-top:0.4rem;" @click="onMeteorShower">☄️ 立即触发</button>
+        </div>
+      </template>
+    </ControlPanel>
   </div>
 </template>
 

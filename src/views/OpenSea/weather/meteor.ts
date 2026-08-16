@@ -1,95 +1,235 @@
 import * as THREE from 'three/webgpu'
+import {
+  Fn, uniform, float, uv, vec2, vec4,
+  sin, cos, exp, abs, max, pow, mix, fract, floor,
+  smoothstep, clamp, length, dot, Loop
+} from 'three/tsl'
+
+/** 流星系统配置（可在控制面板实时调整） */
+export interface MeteorConfig {
+  /** 轨迹模式：random = 左右互飞横穿 | radiant = 辐射点流星雨 */
+  mode: 'random' | 'radiant'
+  /** 辐射模式下每批（一场流星雨）的流星数量（1~6） */
+  radiantBurst: number
+  /** 辐射模式下从辐射点向外发散的横向范围（0.3 收窄 ~ 1.5 宽阔） */
+  radiantSpread: number
+}
+
+const METEOR_CONFIG_DEFAULTS: MeteorConfig = {
+  mode: 'random',
+  radiantBurst: 3,
+  radiantSpread: 0.8,
+}
+
+/** 流星颜色：红 / 白 两种（对应 effect_01.wgsl 的红白双色火焰），每颗流星随机选取 */
+const METEOR_COLORS = [
+  new THREE.Color(1.0, 0.42, 0.22), // 红：炽热橙红
+  new THREE.Color(0.98, 0.97, 1.0), // 白：白蓝炽亮
+]
 
 /**
  * 流星（shooting star）系统 — 仅用于 Clear 晴朗夜空
  *
- * 实现：
- *  - 拖尾：一条 Line（2 顶点），头部亮白蓝、尾部透明（顶点色渐变）
- *  - 头部：一个发光 Sprite（径向渐变贴图），叠加混合 → 适配 Bloom
- *  - 从相机后/屏幕外划出，从左上角或右上角进入视野，斜向划过屏幕落向对侧远方海面
+ * 渲染方式：采用 effect_01.wgsl 的思路 —— 每颗流星是一个朝向相机的公告牌四边形（billboard quad），
+ * 通过 TSL 节点着色器在片元阶段程序化生成拖尾火焰（XorDev 干涉纹理 + 噪声扰动 + tanh 色调映射），
+ * 取代原先的 Line 拖尾 + Sprite 头部分离物体，整体更贴合“流星”的视觉形态。
+ *
+ * 轨迹模式：
+ *  - random：左右两侧互相飞 —— 从左侧/右侧屏幕外进入，水平飞向对侧（左→右 / 右→左），
+ *    距离镜头很远（1500~3200），出画后淡出
+ *  - radiant：辐射点模式 —— 每批流星从屏幕上方的同一个辐射点附近出现，
+ *    向下方/两侧扇形发散射向远方，形成流星雨视觉。
  */
-
-export function createMeteorSystem(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+export function createMeteorSystem(
+  scene: THREE.Scene,
+  camera: THREE.PerspectiveCamera,
+  config: Partial<MeteorConfig> = {},
+) {
   // ---- 常量 ----
-  const TRAIL_LEN = 300 // 拖尾长度（世界单位）
-  const ENTRY_DIST_MIN = 500 // 进入视野时的深度（起点，较近）
-  const ENTRY_DIST_RANGE = 300 // 深度随机范围（500~800）
+  const TRAIL_LEN = 320 // 着色器四边形长度（沿飞行方向，覆盖拖尾，世界单位）
+  const TRAIL_WIDTH = 60 // 着色器四边形宽度（垂直飞行方向，世界单位）
+  const SKY_DIST_MIN = 1500 // 流星远距离基准（距离镜头很远才好看）
+  const SKY_DIST_RANGE = 1700 // 远距离随机范围（1500~3200）
   const BEHIND_LEN = 900 // 从屏幕外/相机后方延伸出的起点长度
-  const SPEED_BASE = 600 // 飞行速度基准
-  const SPEED_RANGE = 150 // 飞行速度随机范围
-  const LAND_MIN = 0.75 // 落点至少在对侧海平面 3/4 处（NDC x 绝对值）
-  const SEA_FADE_H = 14 // 距海面（y=0）该高度内开始淡出
-  const FADE_DIST = 2600 // 距相机超过该距离后开始淡出（兜底，远方变暗）
-  const FADE_RANGE = 900 // 淡出过渡距离
+  const SPEED_BASE = 380 // 飞行速度基准（放慢，便于看清拖尾）
+  const SPEED_RANGE = 120 // 飞行速度随机范围（380~500）
+  const SKY_NDC_MIN = 0.12 // 落点 NDC y 下限（海平面之上，避免与海面相交）
+  const CROSS_EXIT_X = 1.05 // 横穿屏幕模式：屏幕外横向出画点（NDC x 绝对值）
+  const SKY_WORLD_MIN_Y = 36 // 头部世界高度下限（四边形半高 30 + 余量），保证整块贴图都在海平面之上
+  const SEA_FADE_H = 14 // 距海面（y=0）该高度内开始淡出（安全兜底，正常轨迹不会触发）
+  const FADE_DIST = 3600 // 距相机超过该距离后开始淡出（兜底，远方变暗）
+  const FADE_RANGE = 1200 // 淡出过渡距离
   const POOL_SIZE = 6 // 同时最多存在的流星数
 
-  // ---- 头部发光 Sprite 纹理（所有流星共享） ----
-  const canvas = document.createElement('canvas')
-  canvas.width = 32
-  canvas.height = 32
-  const ctx = canvas.getContext('2d')!
-  const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16)
-  grad.addColorStop(0, 'rgba(255,255,255,0.4)')
-  grad.addColorStop(0.3, 'rgba(200,220,255,0.5)')
-  grad.addColorStop(1, 'rgba(200,220,255,0)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, 32, 32)
-  const headTex = new THREE.CanvasTexture(canvas)
-  headTex.needsUpdate = true
+  /* ---------------------------------------------------------------------------
+     流星配置 / 辐射点模式状态（控制面板可实时调整）
+     --------------------------------------------------------------------------- */
+  let cfg: MeteorConfig = { ...METEOR_CONFIG_DEFAULTS, ...config }
+
+  /** 数值钳制（屏幕 NDC 范围用） */
+  const clampNum = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+
+  /** 待生成流星队列项：辐射点模式下错峰生成的一颗流星 */
+  interface BurstSpec {
+    delay: number
+    speedMul: number
+    entry: THREE.Vector3
+    landing: THREE.Vector3
+  }
+
+  /** 更新配置（与默认值合并并钳制，实时生效） */
+  function setConfig(partial: Partial<MeteorConfig>) {
+    cfg = { ...cfg, ...partial }
+    cfg.radiantBurst = clampNum(Math.round(cfg.radiantBurst), 1, 6)
+    cfg.radiantSpread = clampNum(cfg.radiantSpread, 0.2, 2.0)
+  }
+
+  // 辐射点模式：当前辐射点（屏幕 NDC）与待生成队列
+  let radiant: { x: number; y: number } | null = null
+  let burstQueue: BurstSpec[] = []
+
+  /* ---------------------------------------------------------------------------
+     effect_01.wgsl 共享着色器函数（TSL 移植）
+     --------------------------------------------------------------------------- */
+
+  /** 伪随机（哈希） */
+  const random2d = Fn(([p]: any) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453123)))
+
+  /** 二维平滑噪声 */
+  const noise2 = Fn(([p]: any) => {
+    const i = floor(p)
+    const f = fract(p)
+    const a = random2d(i)
+    const b = random2d(i.add(vec2(1.0, 0.0)))
+    const c = random2d(i.add(vec2(0.0, 1.0)))
+    const d = random2d(i.add(vec2(1.0, 1.0)))
+    const u = f.mul(f).mul(float(3.0).sub(f.mul(2.0)))
+    const nx0 = mix(a, b, u.x)
+    const nx1 = mix(c, d, u.x)
+    return mix(nx0, nx1, u.y)
+  })
+
+  /** 向量版 tanh 近似 */
+  const tanhVec4 = Fn(([x]: any) => {
+    const e2x = exp(x.mul(2.0))
+    return e2x.sub(1.0).div(e2x.add(1.0))
+  })
+
+  /** 构建流星拖尾 fragment（每颗流星绑定自己的一套 uniform） */
+  function buildMeteorFragment(
+    uTime: ReturnType<typeof uniform>,
+    uScale: ReturnType<typeof uniform>,
+    uAspect: ReturnType<typeof uniform>,
+    uFade: ReturnType<typeof uniform>,
+    uColor: ReturnType<typeof uniform>,
+  ) {
+    return Fn(() => {
+      // 居中 UV（quad 局部 0..1）
+      const centered = uv().sub(vec2(0.5, 0.5))
+
+      // 缩放进入着色器坐标空间；四边形沿飞行方向（x）拉长，
+      // 用 uAspect（宽/长）补偿 y 轴，避免火焰在窄方向被压得过扁
+      const p = vec2(centered.x.mul(uScale), centered.y.mul(uScale).div(uAspect)).toVar()
+
+      // 噪声扰动：放缓噪声漂移（t*1.5 而非原 t*7），避免火焰结构高速扫掠造成闪烁
+      const f = float(3.0).add(noise2(p.add(vec2(uTime.mul(1.5), 0.0))))
+
+      // 干涉纹理累积（10 次迭代）；weight 幅度压缩（exp(sin*0.6)），
+      // 抑制周期性的亮度脉冲，让火焰保持柔和微闪而不是频闪
+      const o = vec4(0.0).toVar()
+      const v = p.toVar()
+      Loop(10, ({ i }: any) => {
+        const ii = float(i)
+        const phase = ii.mul(ii).add(uTime.add(p.x.mul(0.1)).mul(0.03))
+        v.assign(p.add(cos(vec2(phase, phase).add(ii.mul(vec2(11.0, 9.0)))).mul(5.0)))
+        const colScale = cos(sin(ii).mul(vec4(1.0, 2.0, 3.0, 1.0))).add(vec4(1.0))
+        const weight = exp(sin(ii.mul(ii).add(uTime)).mul(0.6))
+        const denom = length(max(v, vec2(v.x.mul(f).mul(0.02), v.y)))
+        o.addAssign(colScale.mul(weight).div(denom))
+      })
+
+      // tanh 色调映射（提升暗部、抑制高亮 → 柔和饱和的尾焰）
+      const col = tanhVec4(pow(o.div(100.0), vec4(1.5))).toVar()
+
+      // 形状蒙版：头部亮 → 尾部（-x 方向）渐隐；侧向收窄成条带
+      const tail = smoothstep(-8.0, 0.6, p.x)
+      const band = smoothstep(6.0, 1.5, abs(p.y))
+      col.mulAssign(tail.mul(band))
+
+      // 平滑彗尾基座：头部（p.x≈0.6，运动方向前方）最亮，
+      // 沿 -x 方向（身后）连续收细变暗并拉长 → 连贯的长拖尾。
+      // 注意系数必须为正：exp((p.x-0.6)*+k) 在身后（p.x 减小）衰减；
+      // 若用负系数会在身后指数放大，导致“光亮、大的一头”跑到后面（头尾颠倒）。
+      const streak = exp(p.x.sub(0.6).mul(-0.8))
+        .mul(smoothstep(1.2, 0.0, p.x))
+        .mul(exp(abs(p.y).mul(-0.4)))
+      col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.5))
+
+      // 头部炽热核心（流星所在位置的小光晕）
+      const core = exp(length(p).mul(-2.0))
+      col.addAssign(vec4(1.0, 0.95, 0.9, 1.0).mul(core).mul(0.9))
+
+      // 颜色染色 + 生命周期淡入淡出（alpha 取亮度，供透明排序）
+      const tinted = col.xyz.mul(uColor).mul(uFade)
+      const alpha = clamp(max(max(tinted.x, tinted.y), tinted.z), 0.0, 1.0)
+      return vec4(tinted, alpha)
+    })()
+  }
 
   interface Meteor {
     active: boolean
+    age: number
+    /** 屏幕空间拖尾角度（平滑用，防止拖尾 180° 突跳闪烁） */
+    angle: number
     life: number
     lifeTotal: number
     pos: THREE.Vector3
     vel: THREE.Vector3
-    trailGeo: THREE.BufferGeometry
-    trailMat: THREE.LineBasicMaterial
-    trail: THREE.Line
-    headMat: THREE.SpriteMaterial
-    head: THREE.Sprite
+    mesh: THREE.Mesh
+    geometry: THREE.PlaneGeometry
+    material: THREE.MeshBasicNodeMaterial
+    uTime: ReturnType<typeof uniform>
+    uScale: ReturnType<typeof uniform>
+    uAspect: ReturnType<typeof uniform>
+    uFade: ReturnType<typeof uniform>
+    uColor: ReturnType<typeof uniform>
   }
 
-  /** 创建一个流星（拖尾 Line + 头部 Sprite），初始不可见 */
+  /** 创建一个流星（公告牌着色器四边形），初始不可见 */
   function createMeteor(): Meteor {
-    // 拖尾线段（2 个顶点：头 + 尾）
-    const positions = new Float32Array(6)
-    const colors = new Float32Array(6)
-    const trailGeo = new THREE.BufferGeometry()
-    trailGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    trailGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const geometry = new THREE.PlaneGeometry(1, 1)
 
-    const trailMat = new THREE.LineBasicMaterial({
-      vertexColors: true,
+    // 每颗流星独立的 uniform（时间/尺寸/透明度/颜色），保证各自火焰不同步
+    const uTime = uniform(0.0)
+    // 缩放随拖尾长度同步放大（1 p.x ≈ 20 世界单位），保持火焰纹理密度
+    const uScale = uniform(16.0)
+    const uAspect = uniform(TRAIL_WIDTH / TRAIL_LEN)
+    const uFade = uniform(0.0)
+    const uColor = uniform(new THREE.Color(0.72, 0.86, 1.0))
+
+    const material = new THREE.MeshBasicNodeMaterial({
       transparent: true,
-      opacity: 0,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      side: THREE.DoubleSide,
     })
-    const trail = new THREE.Line(trailGeo, trailMat)
-    trail.frustumCulled = false
-    scene.add(trail)
+    material.fragmentNode = buildMeteorFragment(uTime, uScale, uAspect, uFade, uColor)
 
-    // 头部发光 Sprite（径向渐变）
-    const headMat = new THREE.SpriteMaterial({
-      map: headTex,
-      color: new THREE.Color(0.75, 0.85, 1.0),
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    const head = new THREE.Sprite(headMat)
-    head.scale.set(32, 32, 1)
-    scene.add(head)
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.frustumCulled = false
+    mesh.renderOrder = 10
+    mesh.visible = false
+    scene.add(mesh)
 
     return {
       active: false,
+      age: 0,
+      angle: 0,
       life: 0,
       lifeTotal: 0,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
-      trailGeo, trailMat, trail, headMat, head,
+      mesh, geometry, material, uTime, uScale, uAspect, uFade, uColor,
     }
   }
 
@@ -98,6 +238,11 @@ export function createMeteorSystem(scene: THREE.Scene, camera: THREE.Perspective
   for (let i = 0; i < POOL_SIZE; i++) meteors.push(createMeteor())
 
   const tmp = new THREE.Vector3()
+  // 公告牌 / 屏幕空间方向计算用临时向量
+  const tmpRight = new THREE.Vector3()
+  const tmpUp = new THREE.Vector3()
+  const tmpView = new THREE.Vector3()
+  const tmpQuat = new THREE.Quaternion()
   let timer = 4 + Math.random() * 8 // 自动出现的首次延迟
 
   /** 屏幕 NDC 坐标 → 从相机出发的世界方向 */
@@ -115,77 +260,176 @@ export function createMeteorSystem(scene: THREE.Scene, camera: THREE.Perspective
     return out
   }
 
-  /** 屏幕 NDC 坐标对应的海平面（y=0）世界交点；射线不朝下时返回 null */
-  function rayHitSea(ndcX: number, ndcY: number, out: THREE.Vector3): THREE.Vector3 | null {
-    ndcToWorldDir(ndcX, ndcY, out)
-    if (out.y >= -0.0001) return null
-    const t = -camera.position.y / out.y
-    out.multiplyScalar(t).add(camera.position)
-    return out
+  /** 保证头部/落点世界高度在海平面之上，避免四边形切入海面造成闪烁 */
+  function ensureAboveSea(p: THREE.Vector3) {
+    if (p.y < SKY_WORLD_MIN_Y) p.y = SKY_WORLD_MIN_Y
   }
 
-  /** 生成一颗流星：从相机后/屏幕外划出，左上角或右上角进入视野，斜向飞向对侧远方海面（远离相机） */
-  function spawn(m: Meteor) {
+  /** 按给定 进入点/落点 生成一颗流星：沿反向延伸出屏幕外，飞向落点（横穿或飞远） */
+  function spawn(m: Meteor, entry: THREE.Vector3, landing: THREE.Vector3, speedMul = 1) {
     camera.updateMatrixWorld()
 
-    // 随机选边：从左上角或右上角进入视野
-    const fromLeft = Math.random() < 0.5
-    const entryX = fromLeft ? -(0.75 + Math.random() * 0.25) : 0.75 + Math.random() * 0.25
-    const entryY = 0.85 + Math.random() * 0.15 // 屏幕顶部角落
-
-    // 进入视野的世界点：顶部角落、较近深度（之后向远方飞去）
-    const entryDepth = ENTRY_DIST_MIN + Math.random() * ENTRY_DIST_RANGE
-    const entry = new THREE.Vector3()
-    ndcToWorld(entryX, entryY, entryDepth, entry)
-
-    // 落点：对侧海平面至少 3/4 处；y 贴近地平线（NDC y≈0）→ 前方远方海面
-    // （相机高度很低，越接近地平线的海面点越远 → 落点比进入点更远，流星向远方飞）
-    const landX = fromLeft ? LAND_MIN + Math.random() * 0.25 : -(LAND_MIN + Math.random() * 0.25)
-    const landY = -0.002 - Math.random() * 0.008 // ≈ -0.002 ~ -0.01（地平线附近）
-    const landing = new THREE.Vector3()
-    if (!rayHitSea(landX, landY, landing)) {
-      // 兜底：相机前方更远海面
-      ndcToWorldDir(0, -0.05, tmp)
-      landing.copy(camera.position).addScaledVector(tmp, entryDepth * 2)
-      landing.y = 0
-    }
-
-    // 飞行方向：从进入点指向对侧远方海面（远离相机、斜向下、横向越过屏幕）
+    // 飞行方向：从进入点指向落点（横穿屏幕或飞向远方）
     tmp.copy(landing).sub(entry).normalize()
 
-    // 起点：沿反方向延伸出屏幕外/相机后方 → 营造“从相机后面划出”
+    // 起点：沿反方向延伸出屏幕外/相机后方 → 营造“从画面外划出”
     m.pos.copy(entry).addScaledVector(tmp, -BEHIND_LEN)
 
-    const speed = SPEED_BASE + Math.random() * SPEED_RANGE
+    const speed = (SPEED_BASE + Math.random() * SPEED_RANGE) * speedMul
     m.vel.copy(tmp).multiplyScalar(speed)
 
-    // 生命周期 = 从背后起点到落海点全程（略留余量，落海时自然淡出回收）
+    // 生命周期 = 从背后起点到落点全程（略留余量，到达后自然淡出回收）
     m.lifeTotal = (m.pos.distanceTo(landing) / speed) * 1.1
     m.life = m.lifeTotal
+    m.age = 0 // 着色器局部时间从 0 起算（每颗流星火焰不同步）
+    // 随机选择红/白两种流星颜色（对应 effect_01.wgsl 的红白双色）
+    m.uColor.value.copy(METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0])
     m.active = true
-    m.trail.visible = true
-    m.head.visible = true
+    m.mesh.visible = true
   }
 
-  /** 自动生成（定时触发） */
+  /**
+   * 飞行轨迹（random 模式）——流星始终保持在“海平面之上”的天空区域：
+   * 左右两侧互相飞：从左侧/右侧屏幕外进入，水平飞向对侧屏幕外（左→右 或 右→左），
+   * 距离镜头很远（深度 1500~3200），出画后淡出。
+   */
+  function randomSpec(): BurstSpec {
+    camera.updateMatrixWorld()
+
+    // 左→右 或 右→左（随机交替，形成互相飞行的流星）
+    const fromLeft = Math.random() < 0.5
+    const height = 0.25 + Math.random() * 0.4 // 屏幕上方高度（NDC y，海平面之上）
+    const jitter = (Math.random() - 0.5) * 0.15 // 出画高度微扰，轨迹略带倾角
+    const entryDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
+    const exitDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
+
+    const entry = new THREE.Vector3()
+    ndcToWorld(fromLeft ? -CROSS_EXIT_X : CROSS_EXIT_X, height, entryDepth, entry)
+    ensureAboveSea(entry)
+
+    const landing = new THREE.Vector3()
+    ndcToWorld(fromLeft ? CROSS_EXIT_X : -CROSS_EXIT_X, height + jitter, exitDepth, landing)
+    ensureAboveSea(landing)
+
+    // 横穿速度略快，轨迹干脆利落
+    return { delay: 0, speedMul: 0.95 + Math.random() * 0.3, entry, landing }
+  }
+
+  /** 辐射点模式轨迹：从当前辐射点附近出现，向下方/两侧扇形发散射向远方（海平面之上） */
+  function radiantSpec(): BurstSpec {
+    if (!radiant) pickRadiant()
+    const r = radiant!
+
+    // 进入点：在辐射点附近小范围扰动（可见起点贴近辐射点，拖尾自然指向辐射点）
+    const entryX = clampNum(r.x + (Math.random() - 0.5) * 0.1, -0.92, 0.92)
+    const entryY = clampNum(r.y + (Math.random() - 0.5) * 0.08 - 0.03, 0.15, 0.98)
+    const entryDepth = SKY_DIST_MIN + Math.random() * 1000 // 1500~2500（远距离）
+    const entry = new THREE.Vector3()
+    ndcToWorld(entryX, entryY, entryDepth, entry)
+    ensureAboveSea(entry)
+
+    // 落点：以辐射点为原点，向下方/两侧扇形发散；投影到远深度（海平面之上），
+    // 流星向远处飞去并逐渐变暗，不会落入海面造成闪烁
+    const landX = clampNum(r.x + (Math.random() - 0.5) * 2 * cfg.radiantSpread, -0.95, 0.95)
+    const landY = clampNum(r.y - (0.35 + Math.random() * 0.3), SKY_NDC_MIN, 0.9)
+    const landDepth = 2300 + Math.random() * 1300 // 2300~3600（远距离，飞远渐隐）
+    const landing = new THREE.Vector3()
+    ndcToWorld(landX, landY, landDepth, landing)
+    ensureAboveSea(landing)
+    // 流星雨整体略慢、速度略有差异，观感更从容
+    return { delay: 0, speedMul: 0.85 + Math.random() * 0.25, entry, landing }
+  }
+
+  /** 随机选取屏幕上方的一个辐射点（NDC 坐标） */
+  function pickRadiant() {
+    radiant = {
+      x: -0.3 + Math.random() * 0.6, // -0.3 ~ 0.3（上部偏中）
+      y: 0.5 + Math.random() * 0.35, // 0.5 ~ 0.85（屏幕上方）
+    }
+  }
+
+  /** 辐射模式：建立当前辐射点并生成一批流星（队列 + 错峰延迟，形成流星雨） */
+  function startBurst() {
+    pickRadiant()
+    const count = Math.round(cfg.radiantBurst)
+    const specs: BurstSpec[] = []
+    for (let i = 0; i < count; i++) {
+      const s = radiantSpec()
+      specs.push({ ...s, delay: i * (0.08 + Math.random() * 0.14) })
+    }
+    if (specs.length > 0) specs[0].delay = 0 // 第一颗立即出现
+    burstQueue = burstQueue.concat(specs).slice(-12) // 最多保留 12 颗待生成
+  }
+
+  /** 让流星四边形面向相机，并在屏幕平面内旋转，使本地 +x 对齐屏幕上的飞行方向（拖尾朝 -x） */
+  function orientBillboard(m: Meteor) {
+    // 公告牌：复制相机朝向（本地 +x=屏幕右、+y=屏幕上方、+z=朝向观察者）
+    m.mesh.quaternion.copy(camera.quaternion)
+
+    // 屏幕空间飞行角度：把速度投影到相机右/上轴
+    tmpRight.set(1, 0, 0).applyQuaternion(camera.quaternion)
+    tmpUp.set(0, 1, 0).applyQuaternion(camera.quaternion)
+    const vx = m.vel.dot(tmpRight)
+    const vy = m.vel.dot(tmpUp)
+    const target = Math.atan2(vy, vx)
+
+    // 平滑更新角度（取最短路径），避免屏幕速度接近零 / 相机转动时拖尾 180° 突跳闪烁
+    let diff = target - m.angle
+    diff = ((diff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
+    m.angle += diff * 0.25
+
+    // 绕视图轴（相机本地 +z）旋转，令本地 +x 与屏幕飞行方向一致
+    tmpView.set(0, 0, 1).applyQuaternion(camera.quaternion)
+    tmpQuat.setFromAxisAngle(tmpView, m.angle)
+    m.mesh.quaternion.multiply(tmpQuat)
+  }
+
+  /** 自动生成（定时触发）：辐射模式生成一场流星雨，随机模式生成单颗 */
   function autoSpawn() {
-    const slot = meteors.find((m) => !m.active)
-    if (slot) spawn(slot)
+    if (cfg.mode === 'radiant') {
+      startBurst()
+    } else {
+      const slot = meteors.find((m) => !m.active)
+      if (slot) {
+        const s = randomSpec()
+        spawn(slot, s.entry, s.landing, s.speedMul)
+      }
+    }
   }
 
-  /** 手动触发一颗流星（快捷键 M，可连续触发） */
+  /** 手动触发流星（快捷键 M，可连续触发）：辐射模式连发一场流星雨 */
   function trigger() {
-    // 优先空闲槽位；若已满则覆盖第一个，保证每次按键都能触发
-    const slot = meteors.find((m) => !m.active) ?? meteors[0]
-    spawn(slot)
+    if (cfg.mode === 'radiant') {
+      startBurst()
+    } else {
+      // 优先空闲槽位；若已满则覆盖第一个，保证每次按键都能触发
+      const slot = meteors.find((m) => !m.active) ?? meteors[0]
+      const s = randomSpec()
+      spawn(slot, s.entry, s.landing, s.speedMul)
+    }
   }
 
   function update(dt: number) {
-    // 自动出现的计时
+    // 自动出现的计时（辐射模式每批为一场流星雨，间隔略长）
     timer -= dt
     if (timer <= 0) {
       autoSpawn()
-      timer = 5 + Math.random() * 12 // 下次流星间隔 5~17s
+      timer = cfg.mode === 'radiant' ? 9 + Math.random() * 14 : 5 + Math.random() * 12
+    }
+
+    // 辐射模式：错峰生成队列中的流星
+    if (burstQueue.length > 0) {
+      burstQueue[0].delay -= dt
+      while (burstQueue.length > 0 && burstQueue[0].delay <= 0) {
+        const spec = burstQueue.shift()!
+        const slot = meteors.find((m) => !m.active)
+        if (slot) {
+          spawn(slot, spec.entry, spec.landing, spec.speedMul)
+        } else {
+          burstQueue.unshift(spec) // 池满，稍后重试
+          break
+        }
+      }
     }
 
     for (const m of meteors) {
@@ -197,8 +441,9 @@ export function createMeteorSystem(scene: THREE.Scene, camera: THREE.Perspective
         continue
       }
 
-      // 移动
+      // 移动 + 着色器局部时间
       m.pos.addScaledVector(m.vel, dt)
+      m.age += dt
 
       // 淡入淡出：
       //  - 开头快闪
@@ -218,58 +463,44 @@ export function createMeteorSystem(scene: THREE.Scene, camera: THREE.Perspective
         continue
       }
 
-      // 更新拖尾：头部 + 沿 -vel 方向的尾部
-      const posArr = m.trailGeo.attributes.position.array as Float32Array
-      const colArr = m.trailGeo.attributes.color.array as Float32Array
-      tmp.copy(m.vel).normalize()
-      posArr[0] = m.pos.x
-      posArr[1] = m.pos.y
-      posArr[2] = m.pos.z
-      posArr[3] = m.pos.x - tmp.x * TRAIL_LEN
-      posArr[4] = m.pos.y - tmp.y * TRAIL_LEN
-      posArr[5] = m.pos.z - tmp.z * TRAIL_LEN
+      // 位置 + 随距离远去整体缩小
+      m.mesh.position.copy(m.pos)
+      // 参考距离 1200、下限 0.4：远处流星保持可辨识尺寸，拖尾依然清晰
+      const distScale = Math.max(0.4, Math.min(1, 1200 / Math.max(distToCam, 1)))
+      m.mesh.scale.set(TRAIL_LEN * distScale, TRAIL_WIDTH * distScale, 1)
 
-      // 颜色：头淡蓝白 → 尾透明（更柔和，避免过亮）
-      const b = fade
-      colArr[0] = 0.6 * b; colArr[1] = 0.75 * b; colArr[2] = 0.95 * b
-      colArr[3] = 0; colArr[4] = 0; colArr[5] = 0
+      // 公告牌朝向 + 拖尾对齐飞行方向
+      orientBillboard(m)
 
-      m.trailGeo.attributes.position.needsUpdate = true
-      m.trailGeo.attributes.color.needsUpdate = true
-      m.trailMat.opacity = fade
-
-      // 头部光点跟随：位置 + 随距离远去逐渐变小（参考距离 800 时尺寸 32）
-      m.head.position.copy(m.pos)
-      const headScale = 32 * Math.max(0.25, Math.min(1, 800 / Math.max(distToCam, 1)))
-      m.head.scale.set(headScale, headScale, 1)
-      m.headMat.opacity = fade
+      // 更新着色器 uniform（火焰时间 + 生命周期淡入淡出）
+      m.uTime.value = m.age
+      m.uFade.value = fade
     }
   }
 
   function deactivate(m: Meteor) {
     m.active = false
-    m.trailMat.opacity = 0
-    m.headMat.opacity = 0
-    m.trail.visible = false
-    m.head.visible = false
+    m.uFade.value = 0
+    m.mesh.visible = false
   }
 
   /** 离开 Clear 夜晚时重置 */
   function reset() {
     for (const m of meteors) deactivate(m)
-    timer = 5 + Math.random() * 10
+    burstQueue = []
+    radiant = null
+    timer = cfg.mode === 'radiant' ? 6 + Math.random() * 8 : 5 + Math.random() * 10
   }
 
   function dispose() {
     for (const m of meteors) {
-      scene.remove(m.trail)
-      scene.remove(m.head)
-      m.trailGeo.dispose()
-      m.trailMat.dispose()
-      m.headMat.dispose()
+      scene.remove(m.mesh)
+      m.geometry.dispose()
+      m.material.dispose()
     }
-    headTex.dispose()
   }
 
-  return { update, reset, dispose, trigger }
+  // 对外暴露的流星系统接口（与 OpenSea.vue 保持一致）
+  // update/reset/dispose/trigger/setConfig
+  return { update, reset, dispose, trigger, setConfig }
 }
