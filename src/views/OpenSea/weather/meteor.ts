@@ -61,6 +61,51 @@ export function createMeteorSystem(
   const FADE_RANGE = 1200 // 淡出过渡距离
   const POOL_SIZE = 6 // 同时最多存在的流星数
 
+  /* ============================================================
+     ✋ 微调区（A）—— 流星火焰动画（闪烁的主要来源）
+     如果流星飞行时仍觉得“闪 / 抖”，优先减小下面这些值：
+     ------------------------------------------------------------
+     FLAME_NOISE_SPEED  噪声漂移速度（噪声场每秒移动的格子数）
+                        ↑ 越大火焰结构越活跃、越“闪”；↓ 越小越安静
+                        参考：0.8 平稳不闪 / 1.5 有微动 / 3.0 明显闪烁
+     FLAME_WOBBLE       火焰亮度脉冲幅度 exp(sin(t)*WOBBLE)
+                        ↓ 越小整体亮度越稳定（防频闪）
+                        参考：0.3~0.4 很稳 / 0.6 轻微 / 0.8+ 明显呼吸
+     FLAME_DRIFT        火焰纹路相位漂移速度
+                        ↓ 越小图案越静止：0.01~0.02 几乎不动 / 0.05 明显流动
+     FLAME_ITERATIONS   干涉纹理迭代次数
+                        ↓ 越少图案越简单稳定、开销越低：6~8 更稳 / 10 更丰富
+     ============================================================ */
+  const FLAME_NOISE_SPEED = 0.8
+  const FLAME_WOBBLE = 0.4
+  const FLAME_DRIFT = 0.02
+  const FLAME_ITERATIONS = 10
+
+  /* ============================================================
+     ✋ 微调区（B）—— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
+     ------------------------------------------------------------
+     TIME_SCALE      送入着色器的动画时间倍率（越小火焰越慢越安静，0.5=减半）
+     FADE_IN_TIME    淡入秒数（越小“唰”地出现，也减少画面中间淡入带来的闪）
+     FADE_OUT_TIME   淡出秒数（越大结尾越柔和）
+     DIST_REF        四边形尺寸参考距离（越大远处流星越大、越清晰，亚像素闪烁越少）
+     DIST_MIN_SCALE  尺寸下限（越大远处流星保持越大）
+     TAIL_DECAY      彗尾衰减系数（越小尾巴越长）
+     HEAD_SIZE       头部光点衰减系数 exp(-HEAD_SIZE*d)（越小头部越大越亮）
+     HEAD_POS        头部在运动方向前方（+x）的偏移（相对中心）
+     BAND_EDGE       火焰条带侧向收窄边界（越小尾巴越细）
+     SAFE_DEPTH      起点安全深度（越小越贴近相机；过小会重新出现方块闪烁）
+     ============================================================ */
+  const TIME_SCALE = 0.6
+  const FADE_IN_TIME = 0.15
+  const FADE_OUT_TIME = 0.35
+  const DIST_REF = 1200
+  const DIST_MIN_SCALE = 0.4
+  const TAIL_DECAY = 0.15
+  const HEAD_SIZE = 4.0
+  const HEAD_POS = 1.5
+  const BAND_EDGE = 5.0
+  const SAFE_DEPTH = 80
+
   /* ---------------------------------------------------------------------------
      流星配置 / 辐射点模式状态（控制面板可实时调整）
      --------------------------------------------------------------------------- */
@@ -131,19 +176,19 @@ export function createMeteorSystem(
       // 用 uAspect（宽/长）补偿 y 轴，避免火焰在窄方向被压得过扁
       const p = vec2(centered.x.mul(uScale), centered.y.mul(uScale).div(uAspect)).toVar()
 
-      // 噪声扰动：放缓噪声漂移（t*1.5 而非原 t*7），避免火焰结构高速扫掠造成闪烁
-      const f = float(3.0).add(noise2(p.add(vec2(uTime.mul(1.5), 0.0))))
+      // 噪声扰动：漂移速度由微调区 FLAME_NOISE_SPEED 控制（↓ 更安静不闪）
+      const f = float(3.0).add(noise2(p.add(vec2(uTime.mul(FLAME_NOISE_SPEED), 0.0))))
 
-      // 干涉纹理累积（10 次迭代）；weight 幅度压缩（exp(sin*0.6)），
-      // 抑制周期性的亮度脉冲，让火焰保持柔和微闪而不是频闪
+      // 干涉纹理累积（迭代次数 FLAME_ITERATIONS，↓ 更简单稳定）；
+      // weight 幅度由 FLAME_WOBBLE 控制（↓ 亮度更稳防频闪）
       const o = vec4(0.0).toVar()
       const v = p.toVar()
-      Loop(10, ({ i }: any) => {
+      Loop(FLAME_ITERATIONS, ({ i }: any) => {
         const ii = float(i)
-        const phase = ii.mul(ii).add(uTime.add(p.x.mul(0.1)).mul(0.03))
+        const phase = ii.mul(ii).add(uTime.add(p.x.mul(0.1)).mul(FLAME_DRIFT))
         v.assign(p.add(cos(vec2(phase, phase).add(ii.mul(vec2(11.0, 9.0)))).mul(5.0)))
         const colScale = cos(sin(ii).mul(vec4(1.0, 2.0, 3.0, 1.0))).add(vec4(1.0))
-        const weight = exp(sin(ii.mul(ii).add(uTime)).mul(0.6))
+        const weight = exp(sin(ii.mul(ii).add(uTime)).mul(FLAME_WOBBLE))
         const denom = length(max(v, vec2(v.x.mul(f).mul(0.02), v.y)))
         o.addAssign(colScale.mul(weight).div(denom))
       })
@@ -151,8 +196,8 @@ export function createMeteorSystem(
       // tanh 色调映射（提升暗部、抑制高亮 → 柔和饱和的尾焰）
       const col = tanhVec4(pow(o.div(100.0), vec4(1.5))).toVar()
 
-      // 平滑长彗尾：从头部（p.x≈0.6，运动方向前方）沿 -x 方向（身后）缓慢衰减 → 很长
-      const streak = exp(p.x.sub(0.6).mul(0.15))
+      // 平滑长彗尾：从头部沿 -x（身后）衰减，长度由 TAIL_DECAY 控制（↓ 越长）
+      const streak = exp(p.x.sub(0.6).mul(TAIL_DECAY))
         .mul(smoothstep(1.2, 0.0, p.x)) // 前方（头部之后）熄灭
         .mul(exp(abs(p.y).mul(-0.25)))
       col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.6))
@@ -160,11 +205,11 @@ export function createMeteorSystem(
       // 统一形状蒙版：尾部（-x）长拖尾渐隐；前方（超出头部区域）熄灭；侧向收窄成条
       const tail = smoothstep(-8.0, 0.6, p.x)
       const front = smoothstep(2.0, 0.6, p.x) // p.x>2 熄灭，p.x<0.6 全亮
-      const band = smoothstep(8.0, 2.0, abs(p.y))
+      const band = smoothstep(BAND_EDGE, 1.5, abs(p.y)) // 侧向收窄（BAND_EDGE 越大越宽）
       col.mulAssign(tail.mul(front).mul(band))
 
-      // 头部：小而亮的炽热点，位于运动方向前方（+x 偏移 1.5），范围小（近似一个点）
-      const head = exp(length(p.sub(vec2(1.5, 0.0))).mul(-4.0))
+      // 头部：小而亮的炽热点，位于运动方向前方（+x 偏移 HEAD_POS），大小由 HEAD_SIZE 控制
+      const head = exp(length(p.sub(vec2(HEAD_POS, 0.0))).mul(-HEAD_SIZE))
       col.addAssign(vec4(1.0, 0.95, 0.9, 1.0).mul(head).mul(1.2))
 
       // 颜色染色 + 生命周期淡入淡出（alpha 取亮度，供透明排序）
@@ -177,8 +222,6 @@ export function createMeteorSystem(
   interface Meteor {
     active: boolean
     age: number
-    /** 屏幕空间拖尾角度（平滑用，防止拖尾 180° 突跳闪烁） */
-    angle: number
     life: number
     lifeTotal: number
     pos: THREE.Vector3
@@ -222,7 +265,6 @@ export function createMeteorSystem(
     return {
       active: false,
       age: 0,
-      angle: 0,
       life: 0,
       lifeTotal: 0,
       pos: new THREE.Vector3(),
@@ -236,11 +278,11 @@ export function createMeteorSystem(
   for (let i = 0; i < POOL_SIZE; i++) meteors.push(createMeteor())
 
   const tmp = new THREE.Vector3()
-  // 公告牌 / 屏幕空间方向计算用临时向量
-  const tmpRight = new THREE.Vector3()
+  // 运动方向定向计算用临时对象
   const tmpUp = new THREE.Vector3()
   const tmpView = new THREE.Vector3()
   const tmpQuat = new THREE.Quaternion()
+  const tmpMatrix = new THREE.Matrix4()
   let timer = 4 + Math.random() * 8 // 自动出现的首次延迟
 
   /** 屏幕 NDC 坐标 → 从相机出发的世界方向 */
@@ -273,6 +315,15 @@ export function createMeteorSystem(
     // 起点：沿反方向延伸出屏幕外/相机后方 → 营造“从画面外划出”
     m.pos.copy(entry).addScaledVector(tmp, -BEHIND_LEN)
 
+    // 安全护栏：起点不得在相机后方（沿视线前移，保持屏幕外投影不变），
+    // 避免超大四边形在出现瞬间穿过近平面 → 方块闪烁。
+    // 深度阈值由微调区 SAFE_DEPTH 控制（过小会重新出现方块闪烁）
+    camera.getWorldDirection(tmpView)
+    const startDepth = tmpView.dot(m.pos) - tmpView.dot(camera.position)
+    if (startDepth < SAFE_DEPTH) {
+      m.pos.addScaledVector(tmpView, SAFE_DEPTH - startDepth)
+    }
+
     const speed = (SPEED_BASE + Math.random() * SPEED_RANGE) * speedMul
     m.vel.copy(tmp).multiplyScalar(speed)
 
@@ -298,8 +349,11 @@ export function createMeteorSystem(
     const fromLeft = Math.random() < 0.5
     const height = 0.25 + Math.random() * 0.4 // 屏幕上方高度（NDC y，海平面之上）
     const jitter = (Math.random() - 0.5) * 0.15 // 出画高度微扰，轨迹略带倾角
-    const entryDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
-    const exitDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
+    // 以基准深度为中心，入/出画深度只做小幅扰动：保持近似恒深 → 轨迹近似水平，
+    // 避免入/出画深度差过大导致起点跑到相机后方，出现大四边形方块闪烁
+    const baseDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
+    const entryDepth = baseDepth + (Math.random() - 0.5) * 120
+    const exitDepth = baseDepth + (Math.random() - 0.5) * 120
 
     const entry = new THREE.Vector3()
     ndcToWorld(fromLeft ? -CROSS_EXIT_X : CROSS_EXIT_X, height, entryDepth, entry)
@@ -359,27 +413,21 @@ export function createMeteorSystem(
     burstQueue = burstQueue.concat(specs).slice(-12) // 最多保留 12 颗待生成
   }
 
-  /** 让流星四边形面向相机，并在屏幕平面内旋转，使本地 +x 对齐屏幕上的飞行方向（拖尾朝 -x） */
-  function orientBillboard(m: Meteor) {
-    // 公告牌：复制相机朝向（本地 +x=屏幕右、+y=屏幕上方、+z=朝向观察者）
-    m.mesh.quaternion.copy(camera.quaternion)
-
-    // 屏幕空间飞行角度：把速度投影到相机右/上轴
-    tmpRight.set(1, 0, 0).applyQuaternion(camera.quaternion)
-    tmpUp.set(0, 1, 0).applyQuaternion(camera.quaternion)
-    const vx = m.vel.dot(tmpRight)
-    const vy = m.vel.dot(tmpUp)
-    const target = Math.atan2(vy, vx)
-
-    // 平滑更新角度（取最短路径），避免屏幕速度接近零 / 相机转动时拖尾 180° 突跳闪烁
-    let diff = target - m.angle
-    diff = ((diff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
-    m.angle += diff * 0.25
-
-    // 绕视图轴（相机本地 +z）旋转，令本地 +x 与屏幕飞行方向一致
-    tmpView.set(0, 0, 1).applyQuaternion(camera.quaternion)
-    tmpQuat.setFromAxisAngle(tmpView, m.angle)
-    m.mesh.quaternion.multiply(tmpQuat)
+  /** 让流星四边形沿世界运动方向定向（本地 +x = 运动方向，拖尾朝 -x = 身后），
+   *  并让面朝向相机。x 锁定在世界运动方向 → 拖尾始终沿运动方向，不随相机旋转。 */
+  function orientToMotion(m: Meteor) {
+    // 本地 +x = 世界运动方向
+    tmp.copy(m.vel).normalize()
+    // 面法线朝相机
+    tmpView.copy(camera.position).sub(m.pos).normalize()
+    // 上 = 法线 × 运动方向；运动方向与视线近平行（飞向/远离镜头）时用世界 Y 兜底
+    tmpUp.crossVectors(tmpView, tmp)
+    if (tmpUp.lengthSq() < 1e-6) tmpUp.set(0, 1, 0)
+    tmpUp.normalize()
+    // 重正交化 x，构成右手正交基
+    tmp.crossVectors(tmpUp, tmpView).normalize()
+    tmpQuat.setFromRotationMatrix(tmpMatrix.makeBasis(tmp, tmpUp, tmpView))
+    m.mesh.quaternion.copy(tmpQuat)
   }
 
   /** 自动生成（定时触发）：辐射模式生成一场流星雨，随机模式生成单颗 */
@@ -448,8 +496,8 @@ export function createMeteorSystem(
       //  - 生命末尾渐隐
       //  - 接近海面时逐渐变暗（落到海平面消失）
       //  - 距相机过远时淡出（兜底）
-      const fadeIn = Math.min(1, (m.lifeTotal - m.life) / 0.15)
-      const fadeOut = Math.min(1, m.life / 0.35)
+      const fadeIn = Math.min(1, (m.lifeTotal - m.life) / FADE_IN_TIME)
+      const fadeOut = Math.min(1, m.life / FADE_OUT_TIME)
       const seaFade = Math.max(0, Math.min(1, m.pos.y / SEA_FADE_H))
       const distToCam = m.pos.distanceTo(camera.position)
       const distFade = Math.max(0, Math.min(1, 1 - (distToCam - FADE_DIST) / FADE_RANGE))
@@ -463,15 +511,17 @@ export function createMeteorSystem(
 
       // 位置 + 随距离远去整体缩小
       m.mesh.position.copy(m.pos)
-      // 参考距离 1200、下限 0.4：远处流星保持可辨识尺寸，拖尾依然清晰
-      const distScale = Math.max(0.4, Math.min(1, 1200 / Math.max(distToCam, 1)))
+      // 尺寸缩放：参考距离 DIST_REF、下限 DIST_MIN_SCALE
+      // （两者越大，远处流星越大越清晰，亚像素闪烁越少）
+      const distScale = Math.max(DIST_MIN_SCALE, Math.min(1, DIST_REF / Math.max(distToCam, 1)))
       m.mesh.scale.set(TRAIL_LEN * distScale, TRAIL_WIDTH * distScale, 1)
 
-      // 公告牌朝向 + 拖尾对齐飞行方向
-      orientBillboard(m)
+      // 沿世界运动方向定向（拖尾始终指向运动方向，不旋转）
+      orientToMotion(m)
 
-      // 更新着色器 uniform（火焰时间 + 生命周期淡入淡出）
-      m.uTime.value = m.age
+      // 更新着色器 uniform：火焰时间 × TIME_SCALE（整体放慢动画、抑制闪烁）；
+      // 生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
+      m.uTime.value = m.age * TIME_SCALE
       m.uFade.value = fade
     }
   }
