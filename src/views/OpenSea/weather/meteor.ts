@@ -80,10 +80,10 @@ export function createMeteorSystem(
      FLAME_ITERATIONS   干涉纹理迭代次数
                         ↓ 越少图案越简单稳定、开销越低：6~8 更稳 / 10 更丰富
      ============================================================ */
-  const FLAME_NOISE_SPEED = 0.8
-  const FLAME_WOBBLE = 0.4
-  const FLAME_DRIFT = 0.02
-  const FLAME_ITERATIONS = 10
+  const FLAME_NOISE_SPEED = 0
+  const FLAME_WOBBLE = 0
+  const FLAME_DRIFT = 0
+  const FLAME_ITERATIONS = 0
 
   /* ============================================================
      ✋ 微调区（B）—— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
