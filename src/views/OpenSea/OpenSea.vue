@@ -50,7 +50,7 @@ const weatherType = ref(0) // 0=clear, 1=snow, 2=rain, 3=storm
 const weatherLabels = ['☀️ Clear', '❄️ Snow', '🌧️ Rain', '🌪️ Storm']
 
 // Meteor system state（轨迹模式配置，控制面板实时调整）
-const meteorCfg = ref({ mode: 'random', radiantBurst: 3, radiantSpread: 0.8 })
+const meteorCfg = ref({ mode: 'random', radiantBurst: 3, radiantSpread: 0.8, flameAnim: false })
 
 // Fish slider display values (reactive mirrors for template binding)
 const fishDisplay = ref({
@@ -602,6 +602,12 @@ function onMeteorShower() {
   if (weatherType.value === 0 && uNightFactor.value > 0.55 && meteorSystem) {
     meteorSystem.trigger()
   }
+}
+
+/** 切换流星火焰动画（默认关闭 = 静态火焰，更稳定不闪） */
+function onMeteorAnim() {
+  meteorCfg.value.flameAnim = !meteorCfg.value.flameAnim
+  meteorSystem?.setConfig({ flameAnim: meteorCfg.value.flameAnim })
 }
 
 function onAquariumSizeChange(e) {
@@ -1222,6 +1228,7 @@ onBeforeUnmount(() => {
             <button class="light-btn" :class="{ active: meteorCfg.mode === 'random' }" @click="onMeteorMode('random')">随机角</button>
             <button class="light-btn" :class="{ active: meteorCfg.mode === 'radiant' }" @click="onMeteorMode('radiant')">辐射点</button>
           </div>
+          <button class="reset-btn" :class="{ active: meteorCfg.flameAnim }" style="margin-top:0.4rem;" @click="onMeteorAnim">🔥 火焰动画：{{ meteorCfg.flameAnim ? '开' : '关' }}</button>
           <template v-if="meteorCfg.mode === 'radiant'">
             <div class="slider-row" style="margin-bottom:0.4rem;">
               <span class="slider-label">每批数量</span>

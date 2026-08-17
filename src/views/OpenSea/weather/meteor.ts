@@ -13,12 +13,15 @@ export interface MeteorConfig {
   radiantBurst: number
   /** 辐射模式下从辐射点向外发散的横向范围（0.3 收窄 ~ 1.5 宽阔） */
   radiantSpread: number
+  /** 火焰动画：true = 火焰随时间流动 | false = 静态火焰（默认关闭，更稳定不闪） */
+  flameAnim: boolean
 }
 
 const METEOR_CONFIG_DEFAULTS: MeteorConfig = {
   mode: 'random',
   radiantBurst: 3,
   radiantSpread: 0.8,
+  flameAnim: false,
 }
 
 /** 流星颜色：红 / 白 两种（对应 effect_01.wgsl 的红白双色火焰），每颗流星随机选取 */
@@ -39,6 +42,7 @@ const METEOR_COLORS = [
  *    距离镜头很远（1500~3200），出画后淡出
  *  - radiant：辐射点模式 —— 每批流星从屏幕上方的同一个辐射点附近出现，
  *    向下方/两侧扇形发散射向远方，形成流星雨视觉。
+ * 火焰动画可在控制面板开启/关闭（默认关闭 = 静态火焰，更稳定不闪）。
  */
 export function createMeteorSystem(
   scene: THREE.Scene,
@@ -163,6 +167,7 @@ export function createMeteorSystem(
   /** 构建流星拖尾 fragment（每颗流星绑定自己的一套 uniform） */
   function buildMeteorFragment(
     uTime: ReturnType<typeof uniform>,
+    uAnim: ReturnType<typeof uniform>,
     uScale: ReturnType<typeof uniform>,
     uAspect: ReturnType<typeof uniform>,
     uFade: ReturnType<typeof uniform>,
@@ -196,6 +201,10 @@ export function createMeteorSystem(
       // tanh 色调映射（提升暗部、抑制高亮 → 柔和饱和的尾焰）
       const col = tanhVec4(pow(o.div(100.0), vec4(1.5))).toVar()
 
+      // 火焰动画开关：关（uAnim=0）时丢弃干涉累积 → 火焰退化为平滑彗尾+头部，
+      // 彻底消除高亮“亮格”随高速飞行扫过屏幕产生的闪烁方块；开（uAnim=1）恢复
+      col.mulAssign(uAnim)
+
       // 平滑长彗尾：从头部沿 -x（身后）衰减，长度由 TAIL_DECAY 控制（↓ 越长）
       const streak = exp(p.x.sub(0.6).mul(TAIL_DECAY))
         .mul(smoothstep(1.2, 0.0, p.x)) // 前方（头部之后）熄灭
@@ -222,6 +231,8 @@ export function createMeteorSystem(
   interface Meteor {
     active: boolean
     age: number
+    /** 静态火焰时的固定相位（关闭动画时每颗流星图案不同） */
+    staticPhase: number
     life: number
     lifeTotal: number
     pos: THREE.Vector3
@@ -230,6 +241,7 @@ export function createMeteorSystem(
     geometry: THREE.PlaneGeometry
     material: THREE.MeshBasicNodeMaterial
     uTime: ReturnType<typeof uniform>
+    uAnim: ReturnType<typeof uniform>
     uScale: ReturnType<typeof uniform>
     uAspect: ReturnType<typeof uniform>
     uFade: ReturnType<typeof uniform>
@@ -242,6 +254,8 @@ export function createMeteorSystem(
 
     // 每颗流星独立的 uniform（时间/尺寸/透明度/颜色），保证各自火焰不同步
     const uTime = uniform(0.0)
+    // 火焰动画开关：1 = 干涉火焰流动 | 0 = 平滑彗尾静态（默认关闭，无闪烁方块）
+    const uAnim = uniform(0.0)
     // 缩放随拖尾长度同步放大（1 p.x ≈ 20 世界单位），保持火焰纹理密度
     const uScale = uniform(16.0)
     const uAspect = uniform(TRAIL_WIDTH / TRAIL_LEN)
@@ -254,7 +268,7 @@ export function createMeteorSystem(
       depthWrite: false,
       side: THREE.DoubleSide,
     })
-    material.fragmentNode = buildMeteorFragment(uTime, uScale, uAspect, uFade, uColor)
+    material.fragmentNode = buildMeteorFragment(uTime, uAnim, uScale, uAspect, uFade, uColor)
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
@@ -265,11 +279,12 @@ export function createMeteorSystem(
     return {
       active: false,
       age: 0,
+      staticPhase: 0,
       life: 0,
       lifeTotal: 0,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
-      mesh, geometry, material, uTime, uScale, uAspect, uFade, uColor,
+      mesh, geometry, material, uTime, uAnim, uScale, uAspect, uFade, uColor,
     }
   }
 
@@ -331,6 +346,8 @@ export function createMeteorSystem(
     m.lifeTotal = (m.pos.distanceTo(landing) / speed) * 1.1
     m.life = m.lifeTotal
     m.age = 0 // 着色器局部时间从 0 起算（每颗流星火焰不同步）
+    // 静态火焰的固定相位（关闭动画时每颗流星的火焰图案不同）
+    m.staticPhase = Math.random() * Math.PI * 2
     // 随机选择红/白两种流星颜色（对应 effect_01.wgsl 的红白双色）
     m.uColor.value.copy(METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0])
     m.active = true
@@ -519,9 +536,12 @@ export function createMeteorSystem(
       // 沿世界运动方向定向（拖尾始终指向运动方向，不旋转）
       orientToMotion(m)
 
-      // 更新着色器 uniform：火焰时间 × TIME_SCALE（整体放慢动画、抑制闪烁）；
-      // 生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
-      m.uTime.value = m.age * TIME_SCALE
+      // 更新着色器 uniform：
+      //  - 火焰动画开关（关 = 平滑静态彗尾，无干涉亮格 → 无闪烁方块）
+      //  - 火焰时间（动画开 = age*TIME_SCALE 流动；关 = 固定相位静态）
+      //  - 生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
+      m.uAnim.value = cfg.flameAnim ? 1.0 : 0.0
+      m.uTime.value = cfg.flameAnim ? m.age * TIME_SCALE : m.staticPhase
       m.uFade.value = fade
     }
   }
