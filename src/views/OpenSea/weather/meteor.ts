@@ -46,9 +46,9 @@ export function createMeteorSystem(
   config: Partial<MeteorConfig> = {},
 ) {
   // ---- 常量 ----
-  const TRAIL_LEN = 320 // 着色器四边形长度（沿飞行方向，覆盖拖尾，世界单位）
-  const TRAIL_WIDTH = 60 // 着色器四边形宽度（垂直飞行方向，世界单位）
-  const SKY_DIST_MIN = 1500 // 流星远距离基准（距离镜头很远才好看）
+  const TRAIL_LEN = 840 // 着色器四边形长度（沿飞行方向，覆盖拖尾，很长）
+  const TRAIL_WIDTH = 100 // 着色器四边形宽度（垂直飞行方向，世界单位）
+  const SKY_DIST_MIN = 400 // 流星远距离基准（距离镜头很远才好看）
   const SKY_DIST_RANGE = 1700 // 远距离随机范围（1500~3200）
   const BEHIND_LEN = 900 // 从屏幕外/相机后方延伸出的起点长度
   const SPEED_BASE = 380 // 飞行速度基准（放慢，便于看清拖尾）
@@ -151,23 +151,21 @@ export function createMeteorSystem(
       // tanh 色调映射（提升暗部、抑制高亮 → 柔和饱和的尾焰）
       const col = tanhVec4(pow(o.div(100.0), vec4(1.5))).toVar()
 
-      // 形状蒙版：头部亮 → 尾部（-x 方向）渐隐；侧向收窄成条带
+      // 平滑长彗尾：从头部（p.x≈0.6，运动方向前方）沿 -x 方向（身后）缓慢衰减 → 很长
+      const streak = exp(p.x.sub(0.6).mul(0.15))
+        .mul(smoothstep(1.2, 0.0, p.x)) // 前方（头部之后）熄灭
+        .mul(exp(abs(p.y).mul(-0.25)))
+      col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.6))
+
+      // 统一形状蒙版：尾部（-x）长拖尾渐隐；前方（超出头部区域）熄灭；侧向收窄成条
       const tail = smoothstep(-8.0, 0.6, p.x)
-      const band = smoothstep(6.0, 1.5, abs(p.y))
-      col.mulAssign(tail.mul(band))
+      const front = smoothstep(2.0, 0.6, p.x) // p.x>2 熄灭，p.x<0.6 全亮
+      const band = smoothstep(8.0, 2.0, abs(p.y))
+      col.mulAssign(tail.mul(front).mul(band))
 
-      // 平滑彗尾基座：头部（p.x≈0.6，运动方向前方）最亮，
-      // 沿 -x 方向（身后）连续收细变暗并拉长 → 连贯的长拖尾。
-      // 注意系数必须为正：exp((p.x-0.6)*+k) 在身后（p.x 减小）衰减；
-      // 若用负系数会在身后指数放大，导致“光亮、大的一头”跑到后面（头尾颠倒）。
-      const streak = exp(p.x.sub(0.6).mul(-0.8))
-        .mul(smoothstep(1.2, 0.0, p.x))
-        .mul(exp(abs(p.y).mul(-0.4)))
-      col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.5))
-
-      // 头部炽热核心（流星所在位置的小光晕）
-      const core = exp(length(p).mul(-2.0))
-      col.addAssign(vec4(1.0, 0.95, 0.9, 1.0).mul(core).mul(0.9))
+      // 头部：小而亮的炽热点，位于运动方向前方（+x 偏移 1.5），范围小（近似一个点）
+      const head = exp(length(p.sub(vec2(1.5, 0.0))).mul(-4.0))
+      col.addAssign(vec4(1.0, 0.95, 0.9, 1.0).mul(head).mul(1.2))
 
       // 颜色染色 + 生命周期淡入淡出（alpha 取亮度，供透明排序）
       const tinted = col.xyz.mul(uColor).mul(uFade)
