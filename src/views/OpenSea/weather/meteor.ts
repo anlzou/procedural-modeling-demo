@@ -60,7 +60,7 @@ export function createMeteorSystem(
   const SEA_FADE_H = 14 // 距海面（y=0）该高度内开始淡出（安全兜底，正常轨迹不会触发）
   const FADE_DIST = 3600 // 距相机超过该距离后开始淡出（兜底，远方变暗）
   const FADE_RANGE = 1200 // 淡出过渡距离
-  const POOL_SIZE = 6 // 同时最多存在的流星数
+  const POOL_SIZE = 26 // 同时最多存在的流星数
 
   /* ============================================================
      ✋ 微调区 —— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
@@ -81,7 +81,7 @@ export function createMeteorSystem(
   const DIST_REF = 1200
   const DIST_MIN_SCALE = 0.4
   const TAIL_DECAY = 0.15
-  const HEAD_CORE = 10.8
+  const HEAD_CORE = 7.8
   const HEAD_GLOW = 1.1
   const HEAD_POS = 1.0
   const BAND_EDGE = 3.0
