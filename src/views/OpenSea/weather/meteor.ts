@@ -35,11 +35,13 @@ const METEOR_COLORS = [
  * （无时间动画，稳定不闪），取代原先的 Line 拖尾 + Sprite 头部分离物体，整体更贴合“流星”的视觉形态。
  *
  * 轨迹模式：
- *  - random：左右两侧互相飞 —— 从左侧/右侧屏幕外进入，水平飞向对侧（左→右 / 右→左），
- *    距离镜头很远（1500~3200），出画后淡出
+ *  - random：左右两侧互相飞 —— 从左侧/右侧屏幕外进入，略带下坠角飞向对侧（左→右 / 右→左），
+ *    距离镜头很远（1500~3200），出画后淡出；按 M 键随机 1~3 颗错峰连珠触发
+ *    （约 10% 概率含一颗“火球级”大流星：更亮、更大、更慢）
  *  - radiant：辐射点模式 —— 每批流星从屏幕上方的同一个辐射点附近出现，
  *    向下方/两侧扇形发散射向远方，形成流星雨视觉。
- * 火焰渲染为平滑静态彗尾 + 炽热头部（无时间动画），稳定不闪。
+ * 火焰渲染为平滑静态彗尾 + 炽热头部（无时间动画），稳定不闪；
+ * 运动节奏：进入即最亮 → 缓慢变暗，接近落点轻微减速。
  */
 export function createMeteorSystem(
   scene: THREE.Scene,
@@ -65,8 +67,8 @@ export function createMeteorSystem(
   /* ============================================================
      ✋ 微调区 —— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
      ------------------------------------------------------------
-     FADE_IN_TIME    淡入秒数（越小“唰”地出现，也减少画面中间淡入带来的闪）
      FADE_OUT_TIME   淡出秒数（越大结尾越柔和）
+     END_DECEL       末端减速倍率（接近落点时速度 × 该值，1=不减速）
      DIST_REF        四边形尺寸参考距离（越大远处流星越大、越清晰，亚像素闪烁越少）
      DIST_MIN_SCALE  尺寸下限（越大远处流星保持越大）
      TAIL_DECAY      彗尾衰减系数（越小尾巴越长）
@@ -75,9 +77,11 @@ export function createMeteorSystem(
      HEAD_POS        头部球心在运动方向上的位置（与彗尾亮端重叠更饱满；1.5=脱节/孤立亮点）
      BAND_EDGE       彗尾侧向收窄边界（越小尾巴越细；头部不受影响保持圆形）
      SAFE_DEPTH      起点安全深度（越小越贴近相机；过小会重新出现方块闪烁）
+     TRIGGER_MIN/MAX M 键连珠数量区间（随机 1~3 颗错峰触发）
+     FIREBALL_CHANCE 火球级大流星概率（约 30%：更亮 FIREBALL_BRIGHT / 更大 FIREBALL_SCALE / 更慢 FIREBALL_SPEED）
      ============================================================ */
-  const FADE_IN_TIME = 0.15
   const FADE_OUT_TIME = 0.35
+  const END_DECEL = 0.6
   const DIST_REF = 1200
   const DIST_MIN_SCALE = 0.4
   const TAIL_DECAY = 0.15
@@ -86,6 +90,13 @@ export function createMeteorSystem(
   const HEAD_POS = 1.0
   const BAND_EDGE = 3.0
   const SAFE_DEPTH = 80
+  // M 键连珠 / 火球级大流星（更亮、更大、更慢）
+  const TRIGGER_MIN = 1
+  const TRIGGER_MAX = 3
+  const FIREBALL_CHANCE = 0.3
+  const FIREBALL_SCALE = 1.6
+  const FIREBALL_BRIGHT = 1.5
+  const FIREBALL_SPEED = 0.6
 
   /* ---------------------------------------------------------------------------
      流星配置 / 辐射点模式状态（控制面板可实时调整）
@@ -95,10 +106,18 @@ export function createMeteorSystem(
   /** 数值钳制（屏幕 NDC 范围用） */
   const clampNum = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
+  /** 平滑阶梯插值 0→1（smoothstep，用于末端减速 / 变暗曲线） */
+  const smoothStep01 = (t: number) => {
+    const x = Math.max(0, Math.min(1, t))
+    return x * x * (3 - 2 * x)
+  }
+
   /** 待生成流星队列项：辐射点模式下错峰生成的一颗流星 */
   interface BurstSpec {
     delay: number
     speedMul: number
+    scaleMul: number
+    bright: number
     entry: THREE.Vector3
     landing: THREE.Vector3
   }
@@ -174,6 +193,8 @@ export function createMeteorSystem(
     lifeTotal: number
     pos: THREE.Vector3
     vel: THREE.Vector3
+    scaleMul: number
+    bright: number
     mesh: THREE.Mesh
     geometry: THREE.PlaneGeometry
     material: THREE.MeshBasicNodeMaterial
@@ -213,6 +234,8 @@ export function createMeteorSystem(
       lifeTotal: 0,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
+      scaleMul: 1,
+      bright: 1,
       mesh, geometry, material, uScale, uAspect, uFade, uColor,
     }
   }
@@ -249,8 +272,9 @@ export function createMeteorSystem(
     if (p.y < SKY_WORLD_MIN_Y) p.y = SKY_WORLD_MIN_Y
   }
 
-  /** 按给定 进入点/落点 生成一颗流星：沿反向延伸出屏幕外，飞向落点（横穿或飞远） */
-  function spawn(m: Meteor, entry: THREE.Vector3, landing: THREE.Vector3, speedMul = 1) {
+  /** 按给定 进入点/落点 生成一颗流星：沿反向延伸出屏幕外，飞向落点（横穿或飞远）
+   *  scaleMul 尺寸倍率 / bright 亮度倍率（火球级大流星 >1） */
+  function spawn(m: Meteor, entry: THREE.Vector3, landing: THREE.Vector3, speedMul = 1, scaleMul = 1, bright = 1) {
     camera.updateMatrixWorld()
 
     // 飞行方向：从进入点指向落点（横穿屏幕或飞向远方）
@@ -276,6 +300,9 @@ export function createMeteorSystem(
     m.life = m.lifeTotal
     // 随机选择红/白两种流星颜色（对应 effect_01.wgsl 的红白双色）
     m.uColor.value.copy(METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0])
+    // 火球/连珠参数（尺寸倍率、亮度倍率）
+    m.scaleMul = scaleMul
+    m.bright = bright
     m.active = true
     m.mesh.visible = true
   }
@@ -290,8 +317,10 @@ export function createMeteorSystem(
 
     // 左→右 或 右→左（随机交替，形成互相飞行的流星）
     const fromLeft = Math.random() < 0.5
-    const height = 0.25 + Math.random() * 0.4 // 屏幕上方高度（NDC y，海平面之上）
-    const jitter = (Math.random() - 0.5) * 0.15 // 出画高度微扰，轨迹略带倾角
+    // 构图（建议 5）：进入点取屏幕上方 1/4~1/3 高度（NDC y 0.35~0.65）
+    const height = 0.35 + Math.random() * 0.3
+    // 落点略低于进入点（下坠 0.15~0.30）→ 轨迹略带下坠角（约 20°~30°，建议 1），更耐看
+    const landH = clampNum(height - (0.15 + Math.random() * 0.15), SKY_NDC_MIN, 0.9)
     // 以基准深度为中心，入/出画深度只做小幅扰动：保持近似恒深 → 轨迹近似水平，
     // 避免入/出画深度差过大导致起点跑到相机后方，出现大四边形方块闪烁
     const baseDepth = SKY_DIST_MIN + Math.random() * SKY_DIST_RANGE
@@ -303,11 +332,11 @@ export function createMeteorSystem(
     ensureAboveSea(entry)
 
     const landing = new THREE.Vector3()
-    ndcToWorld(fromLeft ? CROSS_EXIT_X : -CROSS_EXIT_X, height + jitter, exitDepth, landing)
+    ndcToWorld(fromLeft ? CROSS_EXIT_X : -CROSS_EXIT_X, landH, exitDepth, landing)
     ensureAboveSea(landing)
 
     // 横穿速度略快，轨迹干脆利落
-    return { delay: 0, speedMul: 0.95 + Math.random() * 0.3, entry, landing }
+    return { delay: 0, speedMul: 0.95 + Math.random() * 0.3, scaleMul: 1, bright: 1, entry, landing }
   }
 
   /** 辐射点模式轨迹：从当前辐射点附近出现，向下方/两侧扇形发散射向远方（海平面之上） */
@@ -332,7 +361,7 @@ export function createMeteorSystem(
     ndcToWorld(landX, landY, landDepth, landing)
     ensureAboveSea(landing)
     // 流星雨整体略慢、速度略有差异，观感更从容
-    return { delay: 0, speedMul: 0.85 + Math.random() * 0.25, entry, landing }
+    return { delay: 0, speedMul: 0.85 + Math.random() * 0.25, scaleMul: 1, bright: 1, entry, landing }
   }
 
   /** 随机选取屏幕上方的一个辐射点（NDC 坐标） */
@@ -381,20 +410,33 @@ export function createMeteorSystem(
       const slot = meteors.find((m) => !m.active)
       if (slot) {
         const s = randomSpec()
-        spawn(slot, s.entry, s.landing, s.speedMul)
+        spawn(slot, s.entry, s.landing, s.speedMul, s.scaleMul, s.bright)
       }
     }
   }
 
-  /** 手动触发流星（快捷键 M，可连续触发）：辐射模式连发一场流星雨 */
+  /** 手动触发流星（快捷键 M，可连续触发）：
+   *  辐射模式连发一场流星雨；随机模式随机 1~3 颗错峰连珠（约 10% 概率含一颗火球级大流星） */
   function trigger() {
     if (cfg.mode === 'radiant') {
       startBurst()
     } else {
-      // 优先空闲槽位；若已满则覆盖第一个，保证每次按键都能触发
-      const slot = meteors.find((m) => !m.active) ?? meteors[0]
-      const s = randomSpec()
-      spawn(slot, s.entry, s.landing, s.speedMul)
+      // 随机 1~3 颗连珠，错峰延迟形成“连珠”观感
+      const count = TRIGGER_MIN + Math.floor(Math.random() * (TRIGGER_MAX - TRIGGER_MIN + 1))
+      const specs: BurstSpec[] = []
+      for (let i = 0; i < count; i++) {
+        const s = randomSpec()
+        const isFireball = i === 0 && Math.random() < FIREBALL_CHANCE
+        specs.push({
+          ...s,
+          delay: i * (0.12 + Math.random() * 0.08),
+          speedMul: isFireball ? FIREBALL_SPEED : s.speedMul,
+          scaleMul: isFireball ? FIREBALL_SCALE : 1,
+          bright: isFireball ? FIREBALL_BRIGHT : 1,
+        })
+      }
+      if (specs.length > 0) specs[0].delay = 0
+      burstQueue = burstQueue.concat(specs).slice(-12)
     }
   }
 
@@ -413,7 +455,7 @@ export function createMeteorSystem(
         const spec = burstQueue.shift()!
         const slot = meteors.find((m) => !m.active)
         if (slot) {
-          spawn(slot, spec.entry, spec.landing, spec.speedMul)
+          spawn(slot, spec.entry, spec.landing, spec.speedMul, spec.scaleMul, spec.bright)
         } else {
           burstQueue.unshift(spec) // 池满，稍后重试
           break
@@ -430,20 +472,24 @@ export function createMeteorSystem(
         continue
       }
 
-      // 移动
-      m.pos.addScaledVector(m.vel, dt)
+      // 进度 0→1（起飞→落点）
+      const prog = 1 - m.life / m.lifeTotal
 
-      // 淡入淡出：
-      //  - 开头快闪
+      // 移动 + 末端减速（建议 2）：接近落点时轻微减速，更真实
+      const decel = 1 - (1 - END_DECEL) * smoothStep01((prog - 0.7) / 0.3)
+      m.pos.addScaledVector(m.vel, dt * decel)
+
+      // 淡入淡出（建议 2）：
+      //  - 进入即最亮 → 全程缓慢变暗（dim 1.0→0.7，取代原“快闪进入”），更柔和
       //  - 生命末尾渐隐
       //  - 接近海面时逐渐变暗（落到海平面消失）
       //  - 距相机过远时淡出（兜底）
-      const fadeIn = Math.min(1, (m.lifeTotal - m.life) / FADE_IN_TIME)
+      const dim = 1.0 - 0.3 * prog
       const fadeOut = Math.min(1, m.life / FADE_OUT_TIME)
       const seaFade = Math.max(0, Math.min(1, m.pos.y / SEA_FADE_H))
       const distToCam = m.pos.distanceTo(camera.position)
       const distFade = Math.max(0, Math.min(1, 1 - (distToCam - FADE_DIST) / FADE_RANGE))
-      const fade = Math.min(fadeIn, fadeOut, seaFade, distFade)
+      const fade = Math.min(dim, fadeOut, seaFade, distFade)
 
       // 已完全不可见（落海 / 飞远）→ 提前回收
       if (fade <= 0.01) {
@@ -456,13 +502,18 @@ export function createMeteorSystem(
       // 尺寸缩放：参考距离 DIST_REF、下限 DIST_MIN_SCALE
       // （两者越大，远处流星越大越清晰，亚像素闪烁越少）
       const distScale = Math.max(DIST_MIN_SCALE, Math.min(1, DIST_REF / Math.max(distToCam, 1)))
-      m.mesh.scale.set(TRAIL_LEN * distScale, TRAIL_WIDTH * distScale, 1)
+      // 火球级大流星 scaleMul>1 → 整体更大（拖尾也更长）
+      m.mesh.scale.set(
+        TRAIL_LEN * distScale * m.scaleMul,
+        TRAIL_WIDTH * distScale * m.scaleMul,
+        1,
+      )
 
       // 沿世界运动方向定向（拖尾始终指向运动方向，不旋转）
       orientToMotion(m)
 
-      // 更新着色器 uniform：生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
-      m.uFade.value = fade
+      // 更新着色器 uniform：淡入淡出 × 火球亮度倍率（bright）
+      m.uFade.value = fade * m.bright
     }
   }
 
