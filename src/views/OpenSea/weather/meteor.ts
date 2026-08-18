@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu'
 import {
-  Fn, uniform, float, uv, vec2, vec4,
-  sin, cos, exp, abs, max, pow, mix, fract, floor,
-  smoothstep, clamp, length, dot, Loop
+  Fn, uniform, uv, vec2, vec4,
+  exp, abs, max,
+  smoothstep, clamp, length,
 } from 'three/tsl'
 
 /** 流星系统配置（可在控制面板实时调整） */
@@ -13,15 +13,12 @@ export interface MeteorConfig {
   radiantBurst: number
   /** 辐射模式下从辐射点向外发散的横向范围（0.3 收窄 ~ 1.5 宽阔） */
   radiantSpread: number
-  /** 火焰动画：true = 火焰随时间流动 | false = 静态火焰（默认关闭，更稳定不闪） */
-  flameAnim: boolean
 }
 
 const METEOR_CONFIG_DEFAULTS: MeteorConfig = {
   mode: 'random',
   radiantBurst: 3,
   radiantSpread: 0.8,
-  flameAnim: false,
 }
 
 /** 流星颜色：红 / 白 两种（对应 effect_01.wgsl 的红白双色火焰），每颗流星随机选取 */
@@ -33,16 +30,16 @@ const METEOR_COLORS = [
 /**
  * 流星（shooting star）系统 — 仅用于 Clear 晴朗夜空
  *
- * 渲染方式：采用 effect_01.wgsl 的思路 —— 每颗流星是一个朝向相机的公告牌四边形（billboard quad），
- * 通过 TSL 节点着色器在片元阶段程序化生成拖尾火焰（XorDev 干涉纹理 + 噪声扰动 + tanh 色调映射），
- * 取代原先的 Line 拖尾 + Sprite 头部分离物体，整体更贴合“流星”的视觉形态。
+ * 渲染方式：每颗流星是一个朝向相机的公告牌四边形（billboard quad），
+ * 通过 TSL 节点着色器在片元阶段程序化生成球形炽热头部（燃烧陨石：实心核心 + 大气光晕）+ 身后窄彗尾
+ * （无时间动画，稳定不闪），取代原先的 Line 拖尾 + Sprite 头部分离物体，整体更贴合“流星”的视觉形态。
  *
  * 轨迹模式：
  *  - random：左右两侧互相飞 —— 从左侧/右侧屏幕外进入，水平飞向对侧（左→右 / 右→左），
  *    距离镜头很远（1500~3200），出画后淡出
  *  - radiant：辐射点模式 —— 每批流星从屏幕上方的同一个辐射点附近出现，
  *    向下方/两侧扇形发散射向远方，形成流星雨视觉。
- * 火焰动画可在控制面板开启/关闭（默认关闭 = 静态火焰，更稳定不闪）。
+ * 火焰渲染为平滑静态彗尾 + 炽热头部（无时间动画），稳定不闪。
  */
 export function createMeteorSystem(
   scene: THREE.Scene,
@@ -66,47 +63,27 @@ export function createMeteorSystem(
   const POOL_SIZE = 6 // 同时最多存在的流星数
 
   /* ============================================================
-     ✋ 微调区（A）—— 流星火焰动画（闪烁的主要来源）
-     如果流星飞行时仍觉得“闪 / 抖”，优先减小下面这些值：
+     ✋ 微调区 —— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
      ------------------------------------------------------------
-     FLAME_NOISE_SPEED  噪声漂移速度（噪声场每秒移动的格子数）
-                        ↑ 越大火焰结构越活跃、越“闪”；↓ 越小越安静
-                        参考：0.8 平稳不闪 / 1.5 有微动 / 3.0 明显闪烁
-     FLAME_WOBBLE       火焰亮度脉冲幅度 exp(sin(t)*WOBBLE)
-                        ↓ 越小整体亮度越稳定（防频闪）
-                        参考：0.3~0.4 很稳 / 0.6 轻微 / 0.8+ 明显呼吸
-     FLAME_DRIFT        火焰纹路相位漂移速度
-                        ↓ 越小图案越静止：0.01~0.02 几乎不动 / 0.05 明显流动
-     FLAME_ITERATIONS   干涉纹理迭代次数
-                        ↓ 越少图案越简单稳定、开销越低：6~8 更稳 / 10 更丰富
-     ============================================================ */
-  const FLAME_NOISE_SPEED = 0
-  const FLAME_WOBBLE = 0
-  const FLAME_DRIFT = 0
-  const FLAME_ITERATIONS = 0
-
-  /* ============================================================
-     ✋ 微调区（B）—— 流星运动 / 淡入淡出 / 尺寸 / 拖尾造型
-     ------------------------------------------------------------
-     TIME_SCALE      送入着色器的动画时间倍率（越小火焰越慢越安静，0.5=减半）
      FADE_IN_TIME    淡入秒数（越小“唰”地出现，也减少画面中间淡入带来的闪）
      FADE_OUT_TIME   淡出秒数（越大结尾越柔和）
      DIST_REF        四边形尺寸参考距离（越大远处流星越大、越清晰，亚像素闪烁越少）
      DIST_MIN_SCALE  尺寸下限（越大远处流星保持越大）
      TAIL_DECAY      彗尾衰减系数（越小尾巴越长）
-     HEAD_SIZE       头部光点衰减系数 exp(-HEAD_SIZE*d)（越小头部越大越亮）
-     HEAD_POS        头部在运动方向前方（+x）的偏移（相对中心）
-     BAND_EDGE       火焰条带侧向收窄边界（越小尾巴越细）
+     HEAD_CORE       头部球形核心衰减 exp(-HEAD_CORE*d)（越小核心球越大；1.8=清晰球体）
+     HEAD_GLOW       头部外层光晕衰减 exp(-HEAD_GLOW*d)（越小光晕越大越柔和；0.7=大气发光）
+     HEAD_POS        头部球心在运动方向上的位置（与彗尾亮端重叠更饱满；1.5=脱节/孤立亮点）
+     BAND_EDGE       彗尾侧向收窄边界（越小尾巴越细；头部不受影响保持圆形）
      SAFE_DEPTH      起点安全深度（越小越贴近相机；过小会重新出现方块闪烁）
      ============================================================ */
-  const TIME_SCALE = 0.6
   const FADE_IN_TIME = 0.15
   const FADE_OUT_TIME = 0.35
   const DIST_REF = 1200
   const DIST_MIN_SCALE = 0.4
   const TAIL_DECAY = 0.15
-  const HEAD_SIZE = 4.0
-  const HEAD_POS = 1.5
+  const HEAD_CORE = 1.8
+  const HEAD_GLOW = 0.7
+  const HEAD_POS = 1.0
   const BAND_EDGE = 5.0
   const SAFE_DEPTH = 80
 
@@ -138,36 +115,9 @@ export function createMeteorSystem(
   let burstQueue: BurstSpec[] = []
 
   /* ---------------------------------------------------------------------------
-     effect_01.wgsl 共享着色器函数（TSL 移植）
+     流星拖尾 fragment（每颗流星绑定自己的一套 uniform）
      --------------------------------------------------------------------------- */
-
-  /** 伪随机（哈希） */
-  const random2d = Fn(([p]: any) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453123)))
-
-  /** 二维平滑噪声 */
-  const noise2 = Fn(([p]: any) => {
-    const i = floor(p)
-    const f = fract(p)
-    const a = random2d(i)
-    const b = random2d(i.add(vec2(1.0, 0.0)))
-    const c = random2d(i.add(vec2(0.0, 1.0)))
-    const d = random2d(i.add(vec2(1.0, 1.0)))
-    const u = f.mul(f).mul(float(3.0).sub(f.mul(2.0)))
-    const nx0 = mix(a, b, u.x)
-    const nx1 = mix(c, d, u.x)
-    return mix(nx0, nx1, u.y)
-  })
-
-  /** 向量版 tanh 近似 */
-  const tanhVec4 = Fn(([x]: any) => {
-    const e2x = exp(x.mul(2.0))
-    return e2x.sub(1.0).div(e2x.add(1.0))
-  })
-
-  /** 构建流星拖尾 fragment（每颗流星绑定自己的一套 uniform） */
   function buildMeteorFragment(
-    uTime: ReturnType<typeof uniform>,
-    uAnim: ReturnType<typeof uniform>,
     uScale: ReturnType<typeof uniform>,
     uAspect: ReturnType<typeof uniform>,
     uFade: ReturnType<typeof uniform>,
@@ -181,45 +131,30 @@ export function createMeteorSystem(
       // 用 uAspect（宽/长）补偿 y 轴，避免火焰在窄方向被压得过扁
       const p = vec2(centered.x.mul(uScale), centered.y.mul(uScale).div(uAspect)).toVar()
 
-      // 噪声扰动：漂移速度由微调区 FLAME_NOISE_SPEED 控制（↓ 更安静不闪）
-      const f = float(3.0).add(noise2(p.add(vec2(uTime.mul(FLAME_NOISE_SPEED), 0.0))))
-
-      // 干涉纹理累积（迭代次数 FLAME_ITERATIONS，↓ 更简单稳定）；
-      // weight 幅度由 FLAME_WOBBLE 控制（↓ 亮度更稳防频闪）
-      const o = vec4(0.0).toVar()
-      const v = p.toVar()
-      Loop(FLAME_ITERATIONS, ({ i }: any) => {
-        const ii = float(i)
-        const phase = ii.mul(ii).add(uTime.add(p.x.mul(0.1)).mul(FLAME_DRIFT))
-        v.assign(p.add(cos(vec2(phase, phase).add(ii.mul(vec2(11.0, 9.0)))).mul(5.0)))
-        const colScale = cos(sin(ii).mul(vec4(1.0, 2.0, 3.0, 1.0))).add(vec4(1.0))
-        const weight = exp(sin(ii.mul(ii).add(uTime)).mul(FLAME_WOBBLE))
-        const denom = length(max(v, vec2(v.x.mul(f).mul(0.02), v.y)))
-        o.addAssign(colScale.mul(weight).div(denom))
-      })
-
-      // tanh 色调映射（提升暗部、抑制高亮 → 柔和饱和的尾焰）
-      const col = tanhVec4(pow(o.div(100.0), vec4(1.5))).toVar()
-
-      // 火焰动画开关：关（uAnim=0）时丢弃干涉累积 → 火焰退化为平滑彗尾+头部，
-      // 彻底消除高亮“亮格”随高速飞行扫过屏幕产生的闪烁方块；开（uAnim=1）恢复
-      col.mulAssign(uAnim)
+      // 平滑静态彗尾 + 炽热头部（无时间动画，稳定不闪）：col 从 0 开始叠加
+      const col = vec4(0.0).toVar()
 
       // 平滑长彗尾：从头部沿 -x（身后）衰减，长度由 TAIL_DECAY 控制（↓ 越长）
       const streak = exp(p.x.sub(0.6).mul(TAIL_DECAY))
         .mul(smoothstep(1.2, 0.0, p.x)) // 前方（头部之后）熄灭
         .mul(exp(abs(p.y).mul(-0.25)))
-      col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.6))
 
-      // 统一形状蒙版：尾部（-x）长拖尾渐隐；前方（超出头部区域）熄灭；侧向收窄成条
+      // 彗尾形状蒙版：尾部（-x）长拖尾渐隐 + 侧向收窄成条（只作用于彗尾，不压扁头部）
       const tail = smoothstep(-8.0, 0.6, p.x)
-      const front = smoothstep(2.0, 0.6, p.x) // p.x>2 熄灭，p.x<0.6 全亮
       const band = smoothstep(BAND_EDGE, 1.5, abs(p.y)) // 侧向收窄（BAND_EDGE 越大越宽）
-      col.mulAssign(tail.mul(front).mul(band))
+      col.addAssign(vec4(1.0, 0.92, 0.85, 1.0).mul(streak).mul(0.6).mul(tail).mul(band))
 
-      // 头部：小而亮的炽热点，位于运动方向前方（+x 偏移 HEAD_POS），大小由 HEAD_SIZE 控制
-      const head = exp(length(p.sub(vec2(HEAD_POS, 0.0))).mul(-HEAD_SIZE))
-      col.addAssign(vec4(1.0, 0.95, 0.9, 1.0).mul(head).mul(1.2))
+      // 整体前向蒙版：超出头部前方（p.x>3）熄灭；头部区域（p.x≈1.0）保持圆形不被压扁
+      const front = smoothstep(3.0, 0.6, p.x)
+      col.mulAssign(front)
+
+      // 头部：像燃烧的陨石球 —— 小亮实心核心（球体）+ 大而柔和的光晕（摩擦大气发光）
+      // 核心亮度倍率 1.8，光晕暖橙色 0.5；HEAD_CORE/HEAD_GLOW 越小越大越柔和
+      const dHead = length(p.sub(vec2(HEAD_POS, 0.0)))
+      const headCore = exp(dHead.mul(-HEAD_CORE))
+      const headGlow = exp(dHead.mul(-HEAD_GLOW))
+      col.addAssign(vec4(1.0, 0.98, 0.95, 1.0).mul(headCore).mul(1.8))
+      col.addAssign(vec4(1.0, 0.9, 0.72, 1.0).mul(headGlow).mul(0.5))
 
       // 颜色染色 + 生命周期淡入淡出（alpha 取亮度，供透明排序）
       const tinted = col.xyz.mul(uColor).mul(uFade)
@@ -230,9 +165,6 @@ export function createMeteorSystem(
 
   interface Meteor {
     active: boolean
-    age: number
-    /** 静态火焰时的固定相位（关闭动画时每颗流星图案不同） */
-    staticPhase: number
     life: number
     lifeTotal: number
     pos: THREE.Vector3
@@ -240,8 +172,6 @@ export function createMeteorSystem(
     mesh: THREE.Mesh
     geometry: THREE.PlaneGeometry
     material: THREE.MeshBasicNodeMaterial
-    uTime: ReturnType<typeof uniform>
-    uAnim: ReturnType<typeof uniform>
     uScale: ReturnType<typeof uniform>
     uAspect: ReturnType<typeof uniform>
     uFade: ReturnType<typeof uniform>
@@ -252,11 +182,7 @@ export function createMeteorSystem(
   function createMeteor(): Meteor {
     const geometry = new THREE.PlaneGeometry(1, 1)
 
-    // 每颗流星独立的 uniform（时间/尺寸/透明度/颜色），保证各自火焰不同步
-    const uTime = uniform(0.0)
-    // 火焰动画开关：1 = 干涉火焰流动 | 0 = 平滑彗尾静态（默认关闭，无闪烁方块）
-    const uAnim = uniform(0.0)
-    // 缩放随拖尾长度同步放大（1 p.x ≈ 20 世界单位），保持火焰纹理密度
+    // 每颗流星独立的 uniform（尺寸/透明度/颜色），保证各自拖尾一致但可独立淡入淡出
     const uScale = uniform(16.0)
     const uAspect = uniform(TRAIL_WIDTH / TRAIL_LEN)
     const uFade = uniform(0.0)
@@ -268,7 +194,7 @@ export function createMeteorSystem(
       depthWrite: false,
       side: THREE.DoubleSide,
     })
-    material.fragmentNode = buildMeteorFragment(uTime, uAnim, uScale, uAspect, uFade, uColor)
+    material.fragmentNode = buildMeteorFragment(uScale, uAspect, uFade, uColor)
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
@@ -278,13 +204,11 @@ export function createMeteorSystem(
 
     return {
       active: false,
-      age: 0,
-      staticPhase: 0,
       life: 0,
       lifeTotal: 0,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
-      mesh, geometry, material, uTime, uAnim, uScale, uAspect, uFade, uColor,
+      mesh, geometry, material, uScale, uAspect, uFade, uColor,
     }
   }
 
@@ -345,9 +269,6 @@ export function createMeteorSystem(
     // 生命周期 = 从背后起点到落点全程（略留余量，到达后自然淡出回收）
     m.lifeTotal = (m.pos.distanceTo(landing) / speed) * 1.1
     m.life = m.lifeTotal
-    m.age = 0 // 着色器局部时间从 0 起算（每颗流星火焰不同步）
-    // 静态火焰的固定相位（关闭动画时每颗流星的火焰图案不同）
-    m.staticPhase = Math.random() * Math.PI * 2
     // 随机选择红/白两种流星颜色（对应 effect_01.wgsl 的红白双色）
     m.uColor.value.copy(METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0])
     m.active = true
@@ -504,9 +425,8 @@ export function createMeteorSystem(
         continue
       }
 
-      // 移动 + 着色器局部时间
+      // 移动
       m.pos.addScaledVector(m.vel, dt)
-      m.age += dt
 
       // 淡入淡出：
       //  - 开头快闪
@@ -536,12 +456,7 @@ export function createMeteorSystem(
       // 沿世界运动方向定向（拖尾始终指向运动方向，不旋转）
       orientToMotion(m)
 
-      // 更新着色器 uniform：
-      //  - 火焰动画开关（关 = 平滑静态彗尾，无干涉亮格 → 无闪烁方块）
-      //  - 火焰时间（动画开 = age*TIME_SCALE 流动；关 = 固定相位静态）
-      //  - 生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
-      m.uAnim.value = cfg.flameAnim ? 1.0 : 0.0
-      m.uTime.value = cfg.flameAnim ? m.age * TIME_SCALE : m.staticPhase
+      // 更新着色器 uniform：生命周期淡入淡出由 FADE_IN_TIME / FADE_OUT_TIME 控制
       m.uFade.value = fade
     }
   }
