@@ -71,7 +71,7 @@ export function createMeteorSystem(
      DIST_MIN_SCALE  尺寸下限（越大远处流星保持越大）
      TAIL_DECAY      彗尾衰减系数（越小尾巴越长）
      HEAD_CORE       头部球形核心衰减 exp(-HEAD_CORE*d)（越小核心球越大；1.8=清晰球体）
-     HEAD_GLOW       头部外层光晕衰减 exp(-HEAD_GLOW*d)（越小光晕越大越柔和；0.7=大气发光）
+     HEAD_GLOW       头部外层光晕衰减 exp(-HEAD_GLOW*d)（越大光晕越小越收敛；1.1=紧贴球体）
      HEAD_POS        头部球心在运动方向上的位置（与彗尾亮端重叠更饱满；1.5=脱节/孤立亮点）
      BAND_EDGE       彗尾侧向收窄边界（越小尾巴越细；头部不受影响保持圆形）
      SAFE_DEPTH      起点安全深度（越小越贴近相机；过小会重新出现方块闪烁）
@@ -81,10 +81,10 @@ export function createMeteorSystem(
   const DIST_REF = 1200
   const DIST_MIN_SCALE = 0.4
   const TAIL_DECAY = 0.15
-  const HEAD_CORE = 1.8
-  const HEAD_GLOW = 0.7
+  const HEAD_CORE = 10.8
+  const HEAD_GLOW = 1.1
   const HEAD_POS = 1.0
-  const BAND_EDGE = 5.0
+  const BAND_EDGE = 3.0
   const SAFE_DEPTH = 80
 
   /* ---------------------------------------------------------------------------
@@ -148,13 +148,18 @@ export function createMeteorSystem(
       const front = smoothstep(3.0, 0.6, p.x)
       col.mulAssign(front)
 
-      // 头部：像燃烧的陨石球 —— 小亮实心核心（球体）+ 大而柔和的光晕（摩擦大气发光）
-      // 核心亮度倍率 1.8，光晕暖橙色 0.5；HEAD_CORE/HEAD_GLOW 越小越大越柔和
-      const dHead = length(p.sub(vec2(HEAD_POS, 0.0)))
+      // 头部：像燃烧的陨石球 —— 小亮实心核心（球体）+ 外层光晕（摩擦大气发光）
+      // 辉光强度 = 下方 .mul(0.32) 倍率（↓更暗）；光晕大小 = HEAD_GLOW（↑更收敛）
+      // 核心亮度 = 下方 .mul(1.8)；核心大小 = HEAD_CORE
+      // 关键1：p.y 需乘回 uAspect 抵消 y 向坐标拉伸，使头部在世界空间为真正的圆形球体
+      // 关键2：headClip 前向裁剪 —— 核心/辉光只保留在球心（HEAD_POS）及后方，
+      //        球心前方不发光，消除“头部向前方的辉光”，头部只是光亮的球 + 身后彗尾
+      const dHead = length(vec2(p.x.sub(HEAD_POS), p.y.mul(uAspect)))
       const headCore = exp(dHead.mul(-HEAD_CORE))
       const headGlow = exp(dHead.mul(-HEAD_GLOW))
-      col.addAssign(vec4(1.0, 0.98, 0.95, 1.0).mul(headCore).mul(1.8))
-      col.addAssign(vec4(1.0, 0.9, 0.72, 1.0).mul(headGlow).mul(0.5))
+      const headClip = smoothstep(HEAD_POS + 0.8, HEAD_POS, p.x) // 前方 0.8 内渐隐
+      col.addAssign(vec4(1.0, 0.98, 0.95, 1.0).mul(headCore).mul(1.8).mul(headClip))
+      col.addAssign(vec4(1.0, 0.9, 0.72, 1.0).mul(headGlow).mul(0.32).mul(headClip))
 
       // 颜色染色 + 生命周期淡入淡出（alpha 取亮度，供透明排序）
       const tinted = col.xyz.mul(uColor).mul(uFade)
