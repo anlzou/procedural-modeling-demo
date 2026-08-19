@@ -323,6 +323,7 @@ let fpsAccum = 0
 let fpsCount = 0
 let onSpaceKey = null
 let onMeteorKey = null
+let onLightningKey = null
 /** Snapshot of the camera state when the page first loads */
 const initialCamState = { pos: new THREE.Vector3(), target: new THREE.Vector3() }
 
@@ -828,6 +829,15 @@ async function init() {
     }
     window.addEventListener('keydown', onMeteorKey)
 
+    // L key → 手动触发闪电（仅 Storm 风暴天气，可连按）
+    onLightningKey = (e) => {
+      if (e.code !== 'KeyL' || e.repeat) return
+      if (weatherType.value === 3 && weatherSystem.value) {
+        weatherSystem.value.triggerLightning()
+      }
+    }
+    window.addEventListener('keydown', onLightningKey)
+
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
@@ -893,6 +903,7 @@ onBeforeUnmount(() => {
   meteorSystem?.dispose()
   if (onSpaceKey) window.removeEventListener('keydown', onSpaceKey)
   if (onMeteorKey) window.removeEventListener('keydown', onMeteorKey)
+  if (onLightningKey) window.removeEventListener('keydown', onLightningKey)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   controls?.dispose()

@@ -71,10 +71,16 @@ export function createWeatherSystem(scene: THREE.Scene, config?: WeatherConfig) 
 
   setWeather('clear')
 
+  /** 手动触发一道闪电（供快捷键 L 调用；仅在风暴模式下有意义） */
+  function triggerLightning() {
+    lightning.trigger()
+  }
+
   return {
     get currentWeather() { return currentWeather },
     setWeather,
     update,
     dispose,
+    triggerLightning,
   }
 }
