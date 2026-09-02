@@ -100,7 +100,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <router-view />
+    <router-view :key="route.path" />
 
     <!-- Wallpaper mode hint -->
     <Transition name="hint-fade">

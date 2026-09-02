@@ -4,7 +4,11 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { LSystem, L_SYSTEM_PRESETS } from '../utils/lsystem.js'
 import InfoPanel from '../components/InfoPanel.vue'
+import { useSceneReady } from '../composables/useSceneReady.js'
 const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
+
+const emit = defineEmits(['ready', 'progress', 'error'])
+const { emitProgress, markReady, markError } = useSceneReady(emit)
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, group, animationId
@@ -97,9 +101,16 @@ function onUpdateLight({ index, visible, intensity }) {
 }
 
 onMounted(() => {
-  init()
-  buildLSystem('plant')
-  animate()
+  try {
+    emitProgress(0.28, '初始化 WebGL…')
+    init()
+    emitProgress(0.68, '生成 L-System…')
+    buildLSystem('plant')
+    animate()
+  } catch (err) {
+    console.error(err)
+    markError('场景初始化失败，请刷新重试')
+  }
 })
 
 onBeforeUnmount(() => {
@@ -325,6 +336,7 @@ function animate() {
   controls.update()
   controls.autoRotate = playing.value
   renderer.render(scene, camera)
+  markReady()
 }
 </script>
 

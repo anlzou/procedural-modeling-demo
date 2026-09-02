@@ -12,6 +12,17 @@ function saveScroll() {
 }
 
 let openSeaPrefetch = null
+const prefetched = new Set()
+
+const MODULE_SCENES = {
+  'sdf-raymarching': () => import('./SDFRaymarching.vue'),
+  'marching-cubes': () => import('./MarchingCubes.vue'),
+  'parametric': () => import('./ParametricGeometry.vue'),
+  'lsystem': () => import('./LSystem.vue'),
+  'periodic-table': () => import('./CSS3DRenderer/PeriodicTable.vue'),
+  'product-showcase': () => import('./CSS3DRenderer/ProductShowcase.vue'),
+}
+
 function prefetchOpenSea() {
   if (openSeaPrefetch) return
   openSeaPrefetch = Promise.all([
@@ -20,14 +31,32 @@ function prefetchOpenSea() {
   ])
 }
 
+function prefetchModule(id) {
+  if (prefetched.has(id)) return
+  prefetched.add(id)
+  if (id === 'open-sea') {
+    prefetchOpenSea()
+    return
+  }
+  import('../components/ModuleLoader.vue')
+  MODULE_SCENES[id]?.()
+}
+
 onMounted(() => {
   const saved = sessionStorage.getItem(SCROLL_KEY)
   if (saved) {
     const scrollEl = document.querySelector('.home')
     if (scrollEl) setTimeout(() => { scrollEl.scrollTop = parseInt(saved) }, 0)
   }
-  const ric = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200))
-  ric(() => prefetchOpenSea())
+  const ric = window.requestIdleCallback || ((cb) => setTimeout(cb, 800))
+  const ids = paths.map((p) => p.id)
+  let i = 0
+  const prefetchNext = () => {
+    if (i >= ids.length) return
+    prefetchModule(ids[i++])
+    ric(prefetchNext, { timeout: 1800 })
+  }
+  ric(prefetchNext, { timeout: 1200 })
 })
 
 onBeforeRouteLeave(() => {
@@ -101,7 +130,7 @@ const paths = [
         class="card"
         :style="{ '--accent': p.color }"
         @click="router.push(`/${p.id}`)"
-        @pointerenter="p.id === 'open-sea' && prefetchOpenSea()"
+        @pointerenter="prefetchModule(p.id)"
       >
         <div class="card-icon">{{ p.icon }}</div>
         <h3>{{ p.title }}</h3>

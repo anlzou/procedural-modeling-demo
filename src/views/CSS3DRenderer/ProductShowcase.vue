@@ -8,8 +8,10 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import InfoPanel from '../../components/InfoPanel.vue'
 const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
+import { useSceneReady } from '../../composables/useSceneReady.js'
 
-const emit = defineEmits(['switchModel'])
+const emit = defineEmits(['switchModel', 'ready', 'progress', 'error'])
+const { emitProgress, markReady, markError } = useSceneReady(emit)
 const containerRef = ref(null)
 
 let scene, camera, webglRenderer, css3dRenderer, composer, controls, animationId
@@ -130,9 +132,16 @@ function onGlobalKeydown(e) {
 }
 
 onMounted(() => {
-  init()
-  animate()
-  window.addEventListener('keydown', onGlobalKeydown)
+  try {
+    emitProgress(0.28, '初始化双渲染器…')
+    init()
+    emitProgress(0.78, '编译后期效果…')
+    animate()
+    window.addEventListener('keydown', onGlobalKeydown)
+  } catch (err) {
+    console.error(err)
+    markError('场景初始化失败，请刷新重试')
+  }
 })
 
 onBeforeUnmount(() => {
@@ -516,6 +525,7 @@ function animate() {
 
   if (composer) composer.render()
   if (css3dRenderer) css3dRenderer.render(scene, camera)
+  markReady()
 }
 </script>
 

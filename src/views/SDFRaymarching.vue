@@ -5,7 +5,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import vertexShader from '../shaders/raymarching.vert?raw'
 import fragmentShader from '../shaders/raymarching.frag?raw'
 import InfoPanel from '../components/InfoPanel.vue'
+import { useSceneReady } from '../composables/useSceneReady.js'
 const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
+
+const emit = defineEmits(['ready', 'progress', 'error'])
+const { emitProgress, markReady, markError } = useSceneReady(emit)
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, shaderMat, shaderMesh
@@ -19,7 +23,7 @@ const speed = ref(1)
 
 // 复杂模型显隐
 const primitivesVisible = ref(true)
-const complexModels = ref([])
+const complexModels = ref([null, null, null, null, null])
 const modelVisible = ref([false, false, false, false, false])
 const modelList = [
   { key: 'spring', label: '螺旋弹簧', color: 0x22d3ee },
@@ -39,15 +43,27 @@ function togglePrimitives() {
 
 function toggleModel(idx) {
   modelVisible.value[idx] = !modelVisible.value[idx]
-  if (complexModels.value[idx]) complexModels.value[idx].visible = modelVisible.value[idx]
+  const mesh = ensureComplexModel(idx)
+  if (mesh) mesh.visible = modelVisible.value[idx]
 }
 
-onMounted(() => { init(); animate() })
+onMounted(() => {
+  try {
+    emitProgress(0.28, '初始化 WebGL…')
+    init()
+    emitProgress(0.72, '编译着色器…')
+    animate()
+  } catch (err) {
+    console.error(err)
+    markError('场景初始化失败，请刷新重试')
+  }
+})
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
   controls?.dispose(); renderer?.dispose()
   objects.forEach(o => { scene.remove(o.mesh); o.mesh.geometry?.dispose(); o.mesh.material?.dispose() })
   complexModels.value.forEach(m => {
+    if (!m) return
     scene.remove(m)
     if (m instanceof THREE.Group) {
       m.children.forEach(c => { c.geometry?.dispose(); c.material?.dispose() })
@@ -97,7 +113,6 @@ function init() {
   pl = new THREE.PointLight(0xff6644, 1.5, 10); pl.position.set(0, 3, 0); scene.add(pl)
 
   create3DObjects()
-  createComplexModels()
   window.addEventListener('resize', onResize)
 }
 
@@ -289,7 +304,8 @@ function createStellation() {
   return group
 }
 
-function createComplexModels() {
+function ensureComplexModel(i) {
+  if (complexModels.value[i]) return complexModels.value[i]
   const models = [
     { fn: createSpringCoil, pos: [-2.2, 0.5, 0], rotSpeed: [0.6, 0.3, 0.1] },
     { fn: createDNAHelix, pos: [0, 0.5, -2.2], rotSpeed: [0.2, 0.8, 0] },
@@ -297,36 +313,35 @@ function createComplexModels() {
     { fn: createSierpinski, pos: [0, -0.3, 2.2], rotSpeed: [0.3, 0.6, 0.1] },
     { fn: createStellation, pos: [0, 1.5, 0], rotSpeed: [0.5, 0.4, 0.3] },
   ]
-
-  models.forEach(({ fn, pos, rotSpeed }, i) => {
-    const result = fn()
-    if (result instanceof THREE.Group) {
-      result.position.set(pos[0], pos[1], pos[2])
-      result.visible = modelVisible.value[i]
-      scene.add(result)
-      complexModels.value.push(result)
-      result.userData.rotSpeed = rotSpeed
-      result.children.forEach(c => {
-        c.userData.rotSpeed = rotSpeed
-        c.userData.initPos = new THREE.Vector3(pos[0], pos[1], pos[2])
-        c.userData.phase = i * 1.5
-      })
-    } else {
-      const mesh = new THREE.Mesh(result, new THREE.MeshPhysicalMaterial({
-        color: modelList[i].color,
-        roughness: 0.25, metalness: 0.6,
-        emissive: modelList[i].color, emissiveIntensity: 0.1,
-        side: THREE.DoubleSide,
-      }))
-      mesh.position.set(pos[0], pos[1], pos[2])
-      mesh.visible = modelVisible.value[i]
-      scene.add(mesh)
-      complexModels.value.push(mesh)
-      mesh.userData.rotSpeed = rotSpeed
-      mesh.userData.initPos = new THREE.Vector3(pos[0], pos[1], pos[2])
-      mesh.userData.phase = i * 1.5
-    }
-  })
+  const spec = models[i]
+  if (!spec) return null
+  const { fn, pos, rotSpeed } = spec
+  const result = fn()
+  let mesh
+  if (result instanceof THREE.Group) {
+    mesh = result
+    mesh.position.set(pos[0], pos[1], pos[2])
+    mesh.children.forEach(c => {
+      c.userData.rotSpeed = rotSpeed
+      c.userData.initPos = new THREE.Vector3(pos[0], pos[1], pos[2])
+      c.userData.phase = i * 1.5
+    })
+  } else {
+    mesh = new THREE.Mesh(result, new THREE.MeshPhysicalMaterial({
+      color: modelList[i].color,
+      roughness: 0.25, metalness: 0.6,
+      emissive: modelList[i].color, emissiveIntensity: 0.1,
+      side: THREE.DoubleSide,
+    }))
+    mesh.position.set(pos[0], pos[1], pos[2])
+  }
+  mesh.visible = modelVisible.value[i]
+  mesh.userData.rotSpeed = rotSpeed
+  mesh.userData.initPos = new THREE.Vector3(pos[0], pos[1], pos[2])
+  mesh.userData.phase = i * 1.5
+  scene.add(mesh)
+  complexModels.value[i] = mesh
+  return mesh
 }
 
 function onResize() {
@@ -362,6 +377,7 @@ function animate(time) {
 
     // Animate complex models
     complexModels.value.forEach((m, i) => {
+      if (!m || !m.visible) return
       const rs = m.userData.rotSpeed || [0.3, 0.4, 0.2]
       if (m instanceof THREE.Group) {
         m.rotation.x += rs[0] * 0.008 * s
@@ -381,6 +397,7 @@ function animate(time) {
   controls.update()
   if (playing.value) controls.autoRotate = true; else controls.autoRotate = false
   renderer.render(scene, camera)
+  markReady()
 }
 </script>
 

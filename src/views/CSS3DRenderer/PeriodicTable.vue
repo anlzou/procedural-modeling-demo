@@ -9,6 +9,10 @@ const ControlPanel = defineAsyncComponent(() => import('../../components/Control
 import FeaturePanel from '../../components/FeaturePanel.vue'
 import ElementDetail from '../../components/ElementDetail.vue'
 import { ELEMENTS, getElementDetail, searchElements } from '../../utils/elementData.js'
+import { useSceneReady } from '../../composables/useSceneReady.js'
+
+const emit = defineEmits(['ready', 'progress', 'error'])
+const { emitProgress, markReady, markError, isDisposed } = useSceneReady(emit)
 
 const containerRef = ref(null)
 const tweenGroup = new Group()
@@ -267,7 +271,13 @@ function transform(targets, duration) {
   }
 }
 
-function init() {
+function yieldToMain() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0))
+  })
+}
+
+async function init() {
   const container = containerRef.value
   const w = container.clientWidth
   const h = container.clientHeight
@@ -281,7 +291,8 @@ function init() {
   rotationGroup = new THREE.Group()
   scene.add(rotationGroup)
 
-  // Create element cards
+  // Create element cards in batches so the loading overlay can keep animating
+  emitProgress(0.32, '创建元素卡片…')
   for (let i = 0; i < table.length; i += 5) {
     const element = document.createElement('div')
     element.className = 'element'
@@ -309,6 +320,11 @@ function init() {
     objectCSS.position.z = Math.random() * 4000 - 2000
     rotationGroup.add(objectCSS)
     objects.push(objectCSS)
+    if (objects.length % 24 === 0) {
+      emitProgress(0.32 + 0.4 * (i / table.length), '创建元素卡片…')
+      await yieldToMain()
+      if (isDisposed()) return
+    }
   }
 
   // Table layout
@@ -400,8 +416,8 @@ function init() {
   controls.addEventListener('change', () => renderer.render(scene, camera))
 
   // Start with table layout
+  emitProgress(0.82, '排列周期表…')
   transform(targets.table, 2000)
-  // 首次渲染
   renderer.render(scene, camera)
 
   window.addEventListener('resize', onResize)
@@ -438,6 +454,7 @@ function animate() {
 
   controls.update()
   renderer.render(scene, camera)
+  markReady()
 }
 
 function onGlobalKeydown(e) {
@@ -447,10 +464,17 @@ function onGlobalKeydown(e) {
   }
 }
 
-onMounted(() => {
-  init()
-  animate()
-  window.addEventListener('keydown', onGlobalKeydown)
+onMounted(async () => {
+  try {
+    emitProgress(0.22, '初始化 CSS3D…')
+    await init()
+    if (isDisposed()) return
+    animate()
+    window.addEventListener('keydown', onGlobalKeydown)
+  } catch (err) {
+    console.error(err)
+    markError('场景初始化失败，请刷新重试')
+  }
 })
 
 onBeforeUnmount(() => {

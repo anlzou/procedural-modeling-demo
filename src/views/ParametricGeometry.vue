@@ -3,7 +3,11 @@ import { ref, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import InfoPanel from '../components/InfoPanel.vue'
+import { useSceneReady } from '../composables/useSceneReady.js'
 const ControlPanel = defineAsyncComponent(() => import('../components/ControlPanel.vue'))
+
+const emit = defineEmits(['ready', 'progress', 'error'])
+const { emitProgress, markReady, markError } = useSceneReady(emit)
 
 const canvasRef = ref(null)
 let scene, camera, renderer, controls, meshes = [], animationId, clock
@@ -105,9 +109,16 @@ const surfaces = {
 }
 
 onMounted(() => {
-  init()
-  buildScene('mobius')
-  animate()
+  try {
+    emitProgress(0.3, '初始化 WebGL…')
+    init()
+    emitProgress(0.7, '生成参数曲面…')
+    buildScene('mobius')
+    animate()
+  } catch (err) {
+    console.error(err)
+    markError('场景初始化失败，请刷新重试')
+  }
 })
 
 onBeforeUnmount(() => {
@@ -273,6 +284,7 @@ function animate() {
   controls.update()
   controls.autoRotate = playing.value
   renderer.render(scene, camera)
+  markReady()
 }
 </script>
 
