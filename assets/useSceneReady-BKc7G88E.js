@@ -1,0 +1,1 @@
+import{y as e}from"./index-C7PxtXtX.js";function t(t){let n=!1,r=!1;e(()=>{r=!0});function i(e,n){r||t(`progress`,{progress:e,label:n})}function a(){n||r||(n=!0,t(`ready`))}function o(e){r||t(`error`,e||`场景初始化失败，请刷新重试`)}function s(){return r}return{emitProgress:i,markReady:a,markError:o,isDisposed:s}}export{t};
