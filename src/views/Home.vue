@@ -11,12 +11,23 @@ function saveScroll() {
   if (scrollEl) sessionStorage.setItem(SCROLL_KEY, scrollEl.scrollTop)
 }
 
+let openSeaPrefetch = null
+function prefetchOpenSea() {
+  if (openSeaPrefetch) return
+  openSeaPrefetch = Promise.all([
+    import('./OpenSea/OpenSeaLoader.vue'),
+    import('./OpenSea/OpenSea.vue'),
+  ])
+}
+
 onMounted(() => {
   const saved = sessionStorage.getItem(SCROLL_KEY)
   if (saved) {
     const scrollEl = document.querySelector('.home')
     if (scrollEl) setTimeout(() => { scrollEl.scrollTop = parseInt(saved) }, 0)
   }
+  const ric = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200))
+  ric(() => prefetchOpenSea())
 })
 
 onBeforeRouteLeave(() => {
@@ -90,6 +101,7 @@ const paths = [
         class="card"
         :style="{ '--accent': p.color }"
         @click="router.push(`/${p.id}`)"
+        @pointerenter="p.id === 'open-sea' && prefetchOpenSea()"
       >
         <div class="card-icon">{{ p.icon }}</div>
         <h3>{{ p.title }}</h3>

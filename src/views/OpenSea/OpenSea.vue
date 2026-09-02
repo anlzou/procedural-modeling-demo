@@ -1,5 +1,5 @@
 <script setup>
-import { ref, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
+import { ref, defineAsyncComponent, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as THREE from 'three/webgpu'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { bloom } from 'three/addons/tsl/display/BloomNode.js'
@@ -12,10 +12,19 @@ import {
 import InfoPanel from '../../components/InfoPanel.vue'
 import { t as i18nT } from '../../utils/oceanI18n.js'
 import { createPerfEngine } from '../../utils/oceanPerf.js'
-import { createFishSystem } from './fish/index.js'
-import { createWeatherSystem } from './weather/weather-system.js'
-import { createMeteorSystem } from './weather/meteor.js'
 const ControlPanel = defineAsyncComponent(() => import('../../components/ControlPanel.vue'))
+
+const emit = defineEmits(['ready', 'progress', 'error'])
+
+function yieldToMain() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0))
+  })
+}
+
+function emitProgress(progress, label) {
+  emit('progress', { progress, label })
+}
 
 /* ---------------------------------------------------------------------------
    Reactive state
@@ -316,9 +325,13 @@ initPerfEngine()
    --------------------------------------------------------------------------- */
 let renderer, scene, camera, controls, postProcessing
 let meteorSystem = null
+let meteorLoadPromise = null
+let weatherLoadPromise = null
 let lastNow = 0
 let lastRealTimeSync = 0
 let revealed = false
+let disposed = false
+let secondaryScheduled = false
 let fpsAccum = 0
 let fpsCount = 0
 let onSpaceKey = null
@@ -588,20 +601,50 @@ function onUpdateSpeed(val) {
 /* ---------------------------------------------------------------------------
    Meteor control（轨迹模式配置，辐射点模式实时生效）
    --------------------------------------------------------------------------- */
+function ensureMeteor() {
+  if (meteorSystem) return Promise.resolve(meteorSystem)
+  if (!scene || !camera) return Promise.resolve(null)
+  if (!meteorLoadPromise) {
+    meteorLoadPromise = import('./weather/meteor.js').then(({ createMeteorSystem }) => {
+      if (disposed) return null
+      if (!meteorSystem && scene && camera) {
+        meteorSystem = createMeteorSystem(scene, camera, meteorCfg.value)
+      }
+      return meteorSystem
+    })
+  }
+  return meteorLoadPromise
+}
+
+function ensureWeather() {
+  if (weatherSystem.value) return Promise.resolve(weatherSystem.value)
+  if (!scene) return Promise.resolve(null)
+  if (!weatherLoadPromise) {
+    weatherLoadPromise = import('./weather/weather-system.js').then(({ createWeatherSystem }) => {
+      if (disposed) return null
+      if (!weatherSystem.value && scene) {
+        weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
+      }
+      return weatherSystem.value
+    })
+  }
+  return weatherLoadPromise
+}
+
 function onMeteorMode(mode) {
   meteorCfg.value.mode = mode
-  meteorSystem?.setConfig({ mode })
+  ensureMeteor().then((m) => m?.setConfig({ mode }))
 }
 
 function onMeteorCfg(key, val) {
   meteorCfg.value[key] = val
-  meteorSystem?.setConfig({ [key]: val })
+  ensureMeteor().then((m) => m?.setConfig({ [key]: val }))
 }
 
 /** 手动触发一场流星雨（辐射模式）/ 一颗流星（随机模式） */
 function onMeteorShower() {
-  if (weatherType.value === 0 && uNightFactor.value > 0.55 && meteorSystem) {
-    meteorSystem.trigger()
+  if (weatherType.value === 0 && uNightFactor.value > 0.55) {
+    ensureMeteor().then((m) => m?.trigger())
   }
 }
 
@@ -642,7 +685,7 @@ function onWeatherChange(e) {
 
   stormActive = isStorm
   weatherType.value = val
-  weatherSystem.value?.setWeather(nextType)
+  ensureWeather().then((sys) => sys?.setWeather(nextType))
 }
 
 /* ---------------------------------------------------------------------------
@@ -667,8 +710,39 @@ function onFishControl(key, e) {
 /* ---------------------------------------------------------------------------
    Animation
    --------------------------------------------------------------------------- */
+function scheduleSecondarySystems() {
+  if (secondaryScheduled || disposed || !scene) return
+  secondaryScheduled = true
+  requestAnimationFrame(async () => {
+    if (disposed || !scene) return
+    const { createFishSystem } = await import('./fish/index.js')
+    if (disposed || !scene) return
+    fishSystem.value = createFishSystem({
+      scene,
+      controls,
+      aquariumSize: aquariumSize.value,
+      showBoundary: showBoundary.value,
+    })
+    fishCamActive.value = false
+    fishModelKeys.value = fishSystem.value.modelKeys
+    setTimeout(() => {
+      if (disposed) return
+      if (fishSystem.value?.loadError) {
+        fishLoadError.value = fishSystem.value.loadError
+        setTimeout(() => { fishLoadError.value = '' }, 6000)
+      }
+    }, 3000)
+
+    if (uNightFactor.value > 0.5) ensureMeteor()
+  })
+}
+
 function revealUI() {
+  if (revealed) return
   revealed = true
+  if (renderer?.domElement) renderer.domElement.style.opacity = '1'
+  emit('ready')
+  scheduleSecondarySystems()
 }
 
 async function frame() {
@@ -705,17 +779,10 @@ async function frame() {
     // Update fish simulation and switch camera if needed
     if (fishSystem.value?.ready) {
       fishSystem.value.update(dt)
-      // Sync fish directional light with procedural sun
       fishSystem.value.updateLights(uSunDir.value, uSunColor.value)
-      // Update weather particles & ripples
-      weatherSystem.value?.update(dt)
-      // Clear + 夜晚 → 流星
-      const nightClear = weatherType.value === 0 && uNightFactor.value > 0.55
-      if (meteorSystem) nightClear ? meteorSystem.update(dt) : meteorSystem.reset()
       fishCamActive.value = fishSystem.value.cameraRig.active
       if (fishCamActive.value) {
         controls.enabled = false
-        // Copy fish camera state to the main camera for post-processing
         const fishCam = fishSystem.value.cameraRig.activeCamera
         camera.position.copy(fishCam.position)
         camera.quaternion.copy(fishCam.quaternion)
@@ -726,6 +793,9 @@ async function frame() {
         controls.enabled = true
       }
     }
+    weatherSystem.value?.update(dt)
+    const nightClear = weatherType.value === 0 && uNightFactor.value > 0.55
+    if (meteorSystem) nightClear ? meteorSystem.update(dt) : meteorSystem.reset()
   }
 
   // Track fish model download progress and ready state
@@ -760,20 +830,30 @@ async function frame() {
 async function init() {
   if (!('gpu' in navigator) || !navigator.gpu) {
     console.error('[OpenSea] WebGPU unavailable')
+    emit('error', '当前浏览器不支持 WebGPU，请使用 Chrome / Edge 113+')
     return
   }
   try {
+    emitProgress(0.22, '检测 GPU…')
+    await nextTick()
     PERF.tier = await PERF.pickInitialTier()
+    if (disposed) return
     PERF.prevTier = PERF.tier
     PERF.benchTier = PERF.tier
     PERF.initPixelRatio()
     uFbmOctaves.value = PERF.cfg.fbm
+
+    emitProgress(0.32, '初始化 WebGPU…')
+    await yieldToMain()
+    if (disposed || !containerRef.value) return
 
     renderer = new THREE.WebGPURenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.0
+    renderer.domElement.style.opacity = '0'
+    renderer.domElement.style.transition = 'opacity 0.7s ease'
     containerRef.value.appendChild(renderer.domElement)
 
     scene = new THREE.Scene()
@@ -782,7 +862,14 @@ async function init() {
     camera = new THREE.PerspectiveCamera(55, containerRef.value.clientWidth / containerRef.value.clientHeight, 0.5, 8000)
     camera.position.set(0, 5.5, 17)
 
+    emitProgress(0.48, '生成海洋…')
+    await yieldToMain()
+    if (disposed) return
     PERF.rebuildOceanMesh(PERF.cfg)
+
+    emitProgress(0.58, '构建天空…')
+    await yieldToMain()
+    if (disposed) return
     PERF.rebuildSkyDome(PERF.cfg)
 
     postProcessing = new THREE.PostProcessing(renderer)
@@ -800,18 +887,6 @@ async function init() {
     controls.autoRotateSpeed = 0.25
     controls.update()
 
-    // Initialize fish system
-    fishSystem.value = createFishSystem({ scene, controls, aquariumSize: 20, showBoundary: false })
-    fishCamActive.value = false
-    fishModelKeys.value = fishSystem.value.modelKeys
-    // Show error toast if fish model failed to load
-    setTimeout(() => {
-      if (fishSystem.value?.loadError) {
-        fishLoadError.value = fishSystem.value.loadError
-        setTimeout(() => { fishLoadError.value = '' }, 6000)
-      }
-    }, 3000)
-
     // Space key → toggle fish cam
     onSpaceKey = (e) => {
       if (e.code !== 'Space' || e.repeat) return
@@ -823,8 +898,8 @@ async function init() {
     // M key → 手动触发流星（仅 Clear 晴朗夜晚，可连续触发）
     onMeteorKey = (e) => {
       if (e.code !== 'KeyM' || e.repeat) return
-      if (weatherType.value === 0 && uNightFactor.value > 0.55 && meteorSystem) {
-        meteorSystem.trigger()
+      if (weatherType.value === 0 && uNightFactor.value > 0.55) {
+        ensureMeteor().then((m) => m?.trigger())
       }
     }
     window.addEventListener('keydown', onMeteorKey)
@@ -832,20 +907,14 @@ async function init() {
     // L key → 手动触发闪电（仅 Storm 风暴天气，可连按）
     onLightningKey = (e) => {
       if (e.code !== 'KeyL' || e.repeat) return
-      if (weatherType.value === 3 && weatherSystem.value) {
-        weatherSystem.value.triggerLightning()
+      if (weatherType.value === 3) {
+        ensureWeather().then((sys) => sys?.triggerLightning())
       }
     }
     window.addEventListener('keydown', onLightningKey)
 
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVisibilityChange)
-
-    // Initialize weather system (storm 含闪电，点亮 uLightning 闪光)
-    weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
-
-    // 流星（仅 Clear 晴朗夜空）；传入控制面板配置（随机角 / 辐射点流星雨）
-    meteorSystem = createMeteorSystem(scene, camera, meteorCfg.value)
 
     applyTimeOfDay(0.55)
     syncTimeWithSystem()
@@ -855,15 +924,24 @@ async function init() {
     camera.position.copy(initialPose.pos)
     controls.target.copy(initialPose.target)
     controls.update()
-    // 保存初始相机状态（用于重置）
     initialCamState.pos.copy(initialPose.pos)
     initialCamState.target.copy(initialPose.target)
 
+    emitProgress(0.78, '编译着色器…')
+    await yieldToMain()
+    if (disposed) return
     await renderer.init()
+    if (disposed) {
+      renderer.setAnimationLoop(null)
+      return
+    }
+
+    emitProgress(0.92, '即将就绪…')
     lastNow = performance.now()
     renderer.setAnimationLoop(frame)
   } catch (err) {
     console.error('[OpenSea] initialization failed:', err)
+    emit('error', '场景初始化失败，请刷新重试')
   }
 }
 
@@ -879,6 +957,7 @@ function onResize() {
 }
 
 function onVisibilityChange() {
+  if (!renderer) return
   if (document.hidden) {
     renderer.setAnimationLoop(null)
   } else {
@@ -895,6 +974,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   if (renderer) {
     renderer.setAnimationLoop(null)
   }

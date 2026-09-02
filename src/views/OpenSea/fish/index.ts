@@ -229,8 +229,11 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
 
   // ---- Initialization ----
   let ready = false
+  let initStarted = false
 
   async function init() {
+    if (initStarted) return
+    initStarted = true
     try {
       await loadFishModel()
     } catch (e) {
@@ -306,9 +309,6 @@ export function createFishSystem(options: FishSystemOptions): FishSystem {
     scene.remove(hemiLight)
     scene.remove(fishSunLight)
   }
-
-  // ---- Start ----
-  init()
 
   return {
     get ready() { return ready },
