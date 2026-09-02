@@ -9,8 +9,10 @@ export type WeatherType = 'clear' | 'rain' | 'snow' | 'storm'
 export interface WeatherConfig {
   rain?: RainConfig
   snow?: SnowConfig
+  camera?: THREE.Camera
   /** TSL uniform（uLightning），闪电时短暂点亮天空/海洋 */
   lightningUniform?: { value: number }
+  lightningDirUniform?: { value: THREE.Vector3 }
 }
 
 export function createWeatherSystem(scene: THREE.Scene, config?: WeatherConfig) {
@@ -23,6 +25,7 @@ export function createWeatherSystem(scene: THREE.Scene, config?: WeatherConfig) 
   let currentWeather: WeatherType = 'clear'
   let elapsed = 0
   let rippleTimer = 0
+  let lightningFlashScale = 0
 
   function ensureRain() {
     if (!rain) rain = createRainSystem(scene, { count: 2000, ...config?.rain })
@@ -52,7 +55,14 @@ export function createWeatherSystem(scene: THREE.Scene, config?: WeatherConfig) 
   }
 
   function ensureLightning() {
-    if (!lightning) lightning = createLightningSystem(scene, config?.lightningUniform)
+    if (!lightning) {
+      lightning = createLightningSystem(scene, {
+        camera: config?.camera,
+        flashUniform: config?.lightningUniform,
+        flashDirUniform: config?.lightningDirUniform,
+        flashScale: lightningFlashScale,
+      })
+    }
     return lightning
   }
 
@@ -111,11 +121,18 @@ export function createWeatherSystem(scene: THREE.Scene, config?: WeatherConfig) 
     ensureLightning().trigger()
   }
 
+  /** 天空/海面闪光，0 只显示闪电 */
+  function setLightningFlash(value: number) {
+    lightningFlashScale = Math.max(0, value)
+    lightning?.setFlashScale(lightningFlashScale)
+  }
+
   return {
     get currentWeather() { return currentWeather },
     setWeather,
     update,
     dispose,
     triggerLightning,
+    setLightningFlash,
   }
 }

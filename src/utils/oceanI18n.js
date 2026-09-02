@@ -10,6 +10,7 @@ export const L10N = {
 
     'panel.hint': 'DRAG TO ORBIT — SCROLL TO ZOOM',
     'panel.weather': 'Weather',
+    'panel.lightningFlash': 'Sky Flash',
     'time.dawn': 'DAWN',
     'time.dusk': 'DUSK',
     'time.midday': 'MIDDAY',
@@ -53,6 +54,7 @@ export const L10N = {
 
     'panel.hint': '拖拽旋转 — 滚轮缩放',
     'panel.weather': '天气',
+    'panel.lightningFlash': '屏幕闪光',
     'time.dawn': '晨曦',
     'time.dusk': '黄昏',
     'time.midday': '正午',

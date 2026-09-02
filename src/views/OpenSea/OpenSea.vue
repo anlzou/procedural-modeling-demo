@@ -57,6 +57,7 @@ const showBoundary = ref(false)
 const weatherSystem = ref(null)
 const weatherType = ref(0) // 0=clear, 1=snow, 2=rain, 3=storm
 const weatherLabels = ['☀️ Clear', '❄️ Snow', '🌧️ Rain', '🌪️ Storm']
+const lightningFlash = ref(0)
 
 // Meteor system state（轨迹模式配置，控制面板实时调整）
 const meteorCfg = ref({ mode: 'random', radiantBurst: 3, radiantSpread: 0.8 })
@@ -117,6 +118,7 @@ const uShallowColor = uniform(new THREE.Color(0.06, 0.32, 0.36))
 const uFbmOctaves = uniform(3)
 const uNightFactor = uniform(0.0)
 const uLightning = uniform(0.0)
+const uLightningDir = uniform(new THREE.Vector3(0, 1, 0))
 
 /* ---------------------------------------------------------------------------
    Waves — five directional Gerstner components
@@ -262,8 +264,12 @@ const skyDomeColor = Fn(() => {
 
   col.addAssign(uNightFactor.mul(vec3(0.30, 0.35, 0.55).mul(moonGlow.add(moonDisc))))
 
-  // 闪电闪光：蓝白瞬间照亮天空
-  col.addAssign(uLightning.mul(vec3(0.75, 0.85, 1.0)))
+  // 闪电闪光：云层带被照亮，并略偏向闪电所在方位
+  const flashDir = normalize(vec3(uLightningDir.x, float(0.0001), uLightningDir.z))
+  const skyAz = normalize(vec3(dir.x, float(0.0001), dir.z))
+  const azMask = mix(float(0.32), float(1.0), pow(max(dot(skyAz, flashDir), 0.0), 1.6))
+  const cloudBand = smoothstep(-0.04, 0.22, dir.y).mul(smoothstep(0.82, 0.18, dir.y))
+  col.addAssign(uLightning.mul(vec3(0.78, 0.86, 1.0)).mul(cloudBand.add(0.22)).mul(azMask))
 
   return vec4(col, 1.0)
 })
@@ -311,8 +317,12 @@ const oceanColor = Fn(() => {
   const camDist = distance(cameraPosition, P)
   col.assign(mix(col, uHorizonColor, smoothstep(150.0, 290.0, camDist)))
 
-  // 闪电闪光：蓝白瞬间照亮海面
-  col.addAssign(uLightning.mul(vec3(0.55, 0.65, 0.9)).mul(0.7))
+  // 闪电闪光：从闪电方向打来的短暂高光，而不是整片加蓝
+  const Lflash = normalize(uLightningDir)
+  const Hflash = normalize(Lflash.add(V))
+  const flashSpec = pow(max(dot(N, Hflash), 0.0), 36.0)
+  const flashFill = max(dot(N, Lflash), 0.0).mul(0.28)
+  col.addAssign(uLightning.mul(vec3(0.72, 0.82, 1.0)).mul(flashSpec.add(flashFill).add(0.1)))
 
   return vec4(col, 1.0)
 })
@@ -623,7 +633,12 @@ function ensureWeather() {
     weatherLoadPromise = import('./weather/weather-system.js').then(({ createWeatherSystem }) => {
       if (disposed) return null
       if (!weatherSystem.value && scene) {
-        weatherSystem.value = createWeatherSystem(scene, { lightningUniform: uLightning })
+        weatherSystem.value = createWeatherSystem(scene, {
+          camera,
+          lightningUniform: uLightning,
+          lightningDirUniform: uLightningDir,
+        })
+        weatherSystem.value.setLightningFlash(lightningFlash.value / 100)
       }
       return weatherSystem.value
     })
@@ -685,7 +700,16 @@ function onWeatherChange(e) {
 
   stormActive = isStorm
   weatherType.value = val
-  ensureWeather().then((sys) => sys?.setWeather(nextType))
+  ensureWeather().then((sys) => {
+    sys?.setLightningFlash(lightningFlash.value / 100)
+    sys?.setWeather(nextType)
+  })
+}
+
+function onLightningFlashChange(e) {
+  const val = Number(e.target.value)
+  lightningFlash.value = val
+  weatherSystem.value?.setLightningFlash(val / 100)
 }
 
 /* ---------------------------------------------------------------------------
@@ -1062,6 +1086,16 @@ onBeforeUnmount(() => {
         <input id="weather-range" type="range" min="0" max="3" step="1"
           :value="weatherType" @input="onWeatherChange"
           :aria-label="t('panel.weather')" />
+      </div>
+
+      <div v-if="weatherType === 3" class="control">
+        <div class="control-head">
+          <label for="lightning-flash">{{ t('panel.lightningFlash') }}</label>
+          <span class="control-value">{{ lightningFlash }}%</span>
+        </div>
+        <input id="lightning-flash" type="range" min="0" max="100" step="1"
+          :value="lightningFlash" @input="onLightningFlashChange"
+          :aria-label="t('panel.lightningFlash')" />
       </div>
 
       <!-- Aquarium Size & Show Boundary -->
